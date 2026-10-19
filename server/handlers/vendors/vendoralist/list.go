@@ -35,7 +35,8 @@ func (r *ListReq) Decode(ctx *gin.Context) error {
 
 type AlistFileItem struct {
 	*model.Item
-	Size uint64 `json:"size"`
+	Size     uint64 `json:"size"`
+	Modified uint64 `json:"modified,omitempty"`
 }
 
 type AlistFSListResp = model.VendorFSListResp[*AlistFileItem]
@@ -233,7 +234,8 @@ AlistFSListResp:
 				),
 				IsDir: flr.GetIsDir(),
 			},
-			Size: flr.GetSize(),
+			Size:     flr.GetSize(),
+			Modified: flr.GetModified(),
 		})
 	}
 

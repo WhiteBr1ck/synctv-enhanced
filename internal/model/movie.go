@@ -70,6 +70,8 @@ type MoreSource struct {
 }
 
 type MovieBase struct {
+	FileSize    uint64               `gorm:"-" json:"fileSize,omitempty"`
+	ModifiedAt  uint64               `gorm:"-" json:"modifiedAt,omitempty"`
 	VendorInfo  VendorInfo           `gorm:"embedded;embeddedPrefix:vendor_info_" json:"vendorInfo,omitempty"`
 	Headers     map[string]string    `gorm:"serializer:fastjson;type:text"        json:"headers,omitempty"`
 	Subtitles   map[string]*Subtitle `gorm:"serializer:fastjson;type:text"        json:"subtitles,omitempty"`

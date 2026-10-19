@@ -1,0 +1,41 @@
+name: release_dev
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release_dev:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Build
+        run: |
+          npm install
+          npm run build
+
+      - name: Create dist.zip
+        run: zip -r dist.zip dist
+
+      - name: Create dist.tar.gz
+        run: tar -zcvf dist.tar.gz dist
+
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "dev"
+          title: "Dev Build"
+          prerelease: true
+          files: |
+            dist.zip
+            dist.tar.gz

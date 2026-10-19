@@ -9,3 +9,15 @@
 /cross
 synctv
 synctv.*
+/data/
+/backups/
+/.tools/
+/.env
+/.env.*
+!/.env.example
+**/node_modules/
+**/dist/
+*.db-shm
+*.db-wal
+*.tsbuildinfo
+*.log

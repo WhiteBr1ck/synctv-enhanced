@@ -1,0 +1,10 @@
+# docker compose -f compose.yaml -f compose.build.yaml build
+services:
+  synctv:
+    build:
+      context: .
+      target: core
+  subtitles:
+    build:
+      context: .
+      target: gateway

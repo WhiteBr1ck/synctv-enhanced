@@ -111,6 +111,7 @@ func (s *AlistVendorService) ListDynamicMovie(
 					"/",
 				),
 				Base: dbModel.MovieBase{
+					FileSize: flr.GetSize(),
 					Name:     flr.GetName(),
 					IsFolder: flr.GetIsDir(),
 					ParentID: dbModel.EmptyNullString(s.movie.ID),
@@ -160,9 +161,11 @@ func (s *AlistVendorService) ListDynamicMovie(
 			CreatorID: s.movie.CreatorID,
 			SubPath:   "/" + strings.Trim(fmt.Sprintf("%s/%s", subPath, flr.GetName()), "/"),
 			Base: dbModel.MovieBase{
-				Name:     flr.GetName(),
-				IsFolder: flr.GetIsDir(),
-				ParentID: dbModel.EmptyNullString(s.movie.ID),
+				FileSize:   flr.GetSize(),
+				ModifiedAt: flr.GetModified(),
+				Name:       flr.GetName(),
+				IsFolder:   flr.GetIsDir(),
+				ParentID:   dbModel.EmptyNullString(s.movie.ID),
 				VendorInfo: dbModel.VendorInfo{
 					Vendor:  dbModel.VendorAlist,
 					Backend: s.movie.VendorInfo.Backend,

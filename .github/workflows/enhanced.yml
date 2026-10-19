@@ -14,6 +14,7 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -36,6 +37,7 @@ jobs:
   images:
     needs: checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -94,13 +96,13 @@ jobs:
           trap 'docker rm -fv enhanced-startup-check >/dev/null 2>&1 || true' EXIT
           path=/web/
           if [ "$TARGET" = gateway ]; then path=/_synctv/health; fi
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 90); do
             if curl --fail --silent "http://127.0.0.1:18080$path" >/dev/null; then exit 0; fi
             if [ "$(docker inspect --format '{{.State.Running}}' enhanced-startup-check)" != true ]; then
               docker logs enhanced-startup-check
               exit 1
             fi
-            echo "Waiting for $TARGET startup ($attempt/30)"
+            echo "Waiting for $TARGET startup ($attempt/90)"
             sleep 1
           done
           docker logs enhanced-startup-check

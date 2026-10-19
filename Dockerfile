@@ -26,6 +26,7 @@ FROM alpine:3.23 AS core
 RUN apk add --no-cache bash ca-certificates su-exec tzdata && mkdir -p /root/.synctv
 COPY --from=server-builder /synctv /usr/local/bin/synctv
 COPY --chmod=755 script/entrypoint.sh /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh
 ENV PUID=0 PGID=0 UMASK=022 TZ=Asia/Shanghai
 WORKDIR /root/.synctv
 VOLUME ["/root/.synctv"]

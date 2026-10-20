@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/synctv-org/synctv/internal/db"
 	"github.com/synctv-org/synctv/internal/model"
 	pb "github.com/synctv-org/synctv/proto/message"
 )
@@ -65,10 +66,19 @@ func (c *Client) SendChatMessage(message string) error {
 	if !c.u.HasRoomPermission(c.r, model.PermissionSendChatMessage) {
 		return model.ErrNoPermission
 	}
+	c.r.chatMu.Lock()
+	defer c.r.chatMu.Unlock()
+	timestamp := time.Now().UnixMilli()
+	if err := db.SaveChatMessage(&model.ChatMessage{
+		RoomID: c.r.ID, Timestamp: timestamp,
+		UserID: c.u.ID, Username: c.u.Username, Content: message,
+	}); err != nil {
+		return err
+	}
 
 	return c.Broadcast(&pb.Message{
 		Type:      pb.MessageType_CHAT,
-		Timestamp: time.Now().UnixMilli(),
+		Timestamp: timestamp,
 		Sender: &pb.Sender{
 			UserId:   c.u.ID,
 			Username: c.u.Username,

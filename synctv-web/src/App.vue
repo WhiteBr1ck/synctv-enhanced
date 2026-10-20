@@ -7,7 +7,7 @@ import { RouterView } from "vue-router";
   <Header />
   <el-container>
     <el-main>
-      <RouterView />
+      <RouterView :key="$route.path" />
     </el-main>
   </el-container>
 </template>

@@ -16,7 +16,7 @@ import { ElNotification, ElMessage } from "element-plus";
 import { useMovieApi } from "@/hooks/useMovie";
 import { useRoomApi, useRoomPermission } from "@/hooks/useRoom";
 import artplayerPluginDanmuku from "artplayer-plugin-danmuku";
-import { strLengthLimit, blobToUint8Array, formatTime } from "@/utils";
+import { strLengthLimit, blobToUint8Array } from "@/utils";
 import { MessageType, Message, Status, messageTypeToJSON } from "@/proto/message";
 import type { options } from "@/components/Player.vue";
 import RoomInfo from "@/components/cinema/RoomInfo.vue";
@@ -29,7 +29,8 @@ import artplayerPluginMediaControl from "@/plugins/control";
 import { artplayPluginSource } from "@/plugins/source";
 import { currentMovieApi } from "@/services/apis/movie";
 import { userStore } from "@/stores/user";
-import { roomInfoApi } from "@/services/apis/room";
+import { roomInfoApi, chatHistoryApi } from "@/services/apis/room";
+import { CHAT_HISTORY_LIMIT, chatText, mergeChatHistory, type ChatEntry } from "@/utils/chat-history";
 import { artplayerSubtitle } from "@/plugins/subtitle";
 import { sendDanmu, artplayerStreamDanmu } from "@/plugins/danmu";
 import { indexStore } from "@/stores";
@@ -84,7 +85,26 @@ const sendElement = (msg: Message) => {
 };
 
 // 消息列表
-const chatMsgList = ref<string[]>([]);
+const chatMsgList = ref<ChatEntry[]>([]);
+let nextChatId = 0;
+let historyGeneration = 0;
+let historyRequest: AbortController | undefined;
+const restoreChatHistory = async () => {
+  const generation = ++historyGeneration;
+  historyRequest?.abort();
+  historyRequest = new AbortController();
+  const { execute, state } = chatHistoryApi();
+  try {
+    await execute({ headers: { Authorization: token.value, "X-Room-Id": roomID.value }, signal: historyRequest.signal });
+    if (generation !== historyGeneration || !state.value) return;
+    chatMsgList.value = mergeChatHistory(state.value, chatMsgList.value);
+    nextTick(() => { if (chatArea.value) chatArea.value.scrollTop = chatArea.value.scrollHeight; });
+  } catch (err: any) {
+    if (err.code !== 'ERR_CANCELED') ElMessage.warning('聊天记录加载失败，重新连接后会再试');
+  }
+};
+watch(status, value => { if (value === 'OPEN') void restoreChatHistory(); });
+onBeforeUnmount(() => { ++historyGeneration; historyRequest?.abort(); });
 const sendChatText = (msg: string, onSuccess?: () => any, onFailed?: () => any) => {
   if (msg.length === 0) {
     ElMessage({
@@ -96,13 +116,18 @@ const sendChatText = (msg: string, onSuccess?: () => any, onFailed?: () => any) 
   }
 
   strLengthLimit(msg, 4096);
-  sendElement(
+  const sent = sendElement(
     Message.create({
       type: MessageType.CHAT,
       chatContent: msg
     })
   );
-  if (onSuccess) onSuccess();
+  if (sent) {
+    if (onSuccess) onSuccess();
+  } else {
+    ElMessage.error('连接尚未就绪，消息未发送');
+    if (onFailed) onFailed();
+  }
 };
 
 const sendChatMsg_ = ref("");
@@ -110,17 +135,17 @@ const onSendSuccess = () => {
   sendChatMsg_.value = "";
 };
 
-const MAX_MESSAGE_COUNT = 64; // 设定聊天记录的最大长度
-const sendMsg = (msg: string) => {
-  chatMsgList.value.push(msg);
-  // 如果超过聊天记录最大长度，则从前面开始删除多余的消息
-  nextTick(() => {
-    if (chatMsgList.value.length > MAX_MESSAGE_COUNT) {
-      chatMsgList.value.splice(0, chatMsgList.value.length - MAX_MESSAGE_COUNT);
-    }
-    // 将新消息存储到 sessionStorage
-    sessionStorage.setItem(`chatMessages-${roomID}`, JSON.stringify(chatMsgList.value));
+const sendMsg = (msg: string, incoming?: Message) => {
+  chatMsgList.value.push({
+    id: `live:${++nextChatId}`,
+    timestamp: incoming?.timestamp || Date.now(),
+    content: incoming?.chatContent || msg,
+    userId: incoming?.sender?.userId,
+    username: incoming ? incoming.sender?.username || '未知用户' : undefined
   });
+  if (chatMsgList.value.length > CHAT_HISTORY_LIMIT) {
+    chatMsgList.value.splice(0, chatMsgList.value.length - CHAT_HISTORY_LIMIT);
+  }
 
   // 确保聊天区域滚动到底部
   nextTick(() => {
@@ -535,12 +560,10 @@ const handleElementMessage = (msg: Message) => {
       if (!msg.chatContent) {
         return;
       }
-      const currentTime = formatTime(new Date()); // 格式化时间
       const senderName = msg.sender?.username;
       const messageContent = `${senderName}: ${msg.chatContent}`;
-      const messageWithTime = `${messageContent} <small>[${currentTime}]</small>`;
       // 添加消息到消息列表
-      sendMsg(messageWithTime);
+      sendMsg(messageContent, msg);
       sendDanmu({ text: messageContent, border: true }, player);
       break;
     }
@@ -677,15 +700,6 @@ onMounted(async () => {
     return;
   }
 
-  // 从 sessionStorage 获取存储的聊天消息
-  const storedMessages = sessionStorage.getItem(`chatMessages-${roomID}`);
-  if (storedMessages) {
-    chatMsgList.value = JSON.parse(storedMessages);
-  }
-
-  // 启动websocket连接
-  open();
-
   // 监听ws信息变化
   watchers.push(
     watch(
@@ -701,6 +715,9 @@ onMounted(async () => {
       }
     )
   );
+
+  // Restore server history after connecting, with live messages already watched.
+  open();
 
   await p();
 
@@ -754,6 +771,7 @@ onBeforeUnmount(() => {
       <div class="card h-full">
         <div class="card-title">
           在线聊天
+          <small class="ml-2 text-gray-500 font-normal" title="聊天记录按房间保存在服务器，保留最近 500 条">自动保存</small>
           <el-button
             v-if="!localStream && can(RoomMemberPermission.PermissionWebRTC)"
             @click="joinWebRTC"
@@ -826,8 +844,9 @@ onBeforeUnmount(() => {
         </div>
         <div class="card-body mb-2">
           <div class="chatArea" ref="chatArea">
-            <div class="message" v-for="item in chatMsgList" :key="item">
-              <div v-html="item"></div>
+            <div class="message whitespace-pre-wrap break-words" v-for="item in chatMsgList" :key="item.id">
+              <span>{{ chatText(item) }}</span>
+              <small class="ml-1 text-gray-500">[{{ new Date(item.timestamp).toLocaleString() }}]</small>
             </div>
           </div>
         </div>

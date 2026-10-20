@@ -27,6 +27,12 @@ func Init(d *gorm.DB, t conf.DatabaseType) error {
 		return err
 	}
 
+	// Add only the enhanced history table; keep the upstream schema version
+	// compatible with v0.9.15 and avoid rebuilding existing data tables.
+	if err := db.AutoMigrate(&model.ChatMessage{}); err != nil {
+		return err
+	}
+
 	err = initGuestUser()
 	if err != nil {
 		return err

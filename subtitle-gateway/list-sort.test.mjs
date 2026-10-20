@@ -16,16 +16,32 @@ test('file type sorting groups extensions case-insensitively and keeps folders f
   assert.deepEqual(items.toSorted((a,b)=>compareItems(a,b,'type-desc')).map(x=>x.name),
     ['Z','clip.mp4','Episode 2.mkv','Episode 10.MKV','caption.ass','README']);
 });
-test('sorts all directory pages before paginating the result', async () => {
+test('sorts a library snapshot in one request before paginating the result', async () => {
   const items = Array.from({length:123},(_,i)=>({name:`Episode ${123-i}`,size:i,modified:1000-i}));
   const pages = [];
   const result = await sortedPage(async(page,max)=>{
     pages.push(page); return {total:items.length,items:items.slice((page-1)*max,page*max)};
   },2,10,'name-asc',item=>item);
-  assert.deepEqual(pages,[1,2]);
+  assert.deepEqual(pages,[1]);
   assert.equal(result.total,123);
   assert.equal(result.items[0].name,'Episode 11');
   assert.equal(result.items.at(-1).name,'Episode 20');
+});
+
+test('falls back to multiple requests when an older backend caps the batch size', async () => {
+  const items = Array.from({length:223},(_,i)=>({name:`Episode ${223-i}`}));
+  const pages=[];
+  const result=await sortedPage(async(page,max)=>{
+    pages.push(page); const capped=Math.min(max,100);
+    return {total:items.length,items:items.slice((page-1)*capped,page*capped)};
+  },2,10,'name-asc',item=>item);
+  assert.deepEqual(pages,[1,2,3]);
+  assert.equal(result.items[0].name,'Episode 11');
+  assert.equal(result.items.at(-1).name,'Episode 20');
+});
+
+test('rejects oversized libraries instead of silently sorting a partial directory', async () => {
+  await assert.rejects(sortedPage(async()=>({total:10001,items:[]}),1,10,'name-asc',item=>item),/10000/);
 });
 test('modification date and size sort numerically with missing metadata last', () => {
   const items = [{name:'old',modified:1,size:200},{name:'new',modified:3,size:10},{name:'unknown'}];

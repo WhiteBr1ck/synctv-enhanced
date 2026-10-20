@@ -152,6 +152,7 @@ func initRoom(room, needAuthUser, needAuthRoom, needAuthWithoutGuestRoom *gin.Ro
 	needAuthRoom.GET("/me", RoomMe)
 
 	needAuthRoom.GET("/info", RoomInfo)
+	needAuthRoom.GET("/chat/history", ChatHistory)
 
 	needAuthRoom.GET("/ws", NewWebSocketHandler(utils.NewWebSocketServer()))
 

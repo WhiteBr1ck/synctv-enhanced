@@ -47,7 +47,7 @@ func List(ctx *gin.Context) {
 		return
 	}
 
-	page, size, err := utils.GetPageAndMax(ctx)
+	page, size, err := utils.GetPageAndMaxWithLimit(ctx, 10000)
 	if err != nil {
 		ctx.AbortWithStatusJSON(http.StatusBadRequest, model.NewAPIErrorResp(err))
 		return
@@ -151,7 +151,7 @@ EmbyFSListResp:
 
 	cli := vendor.LoadEmbyClient(ctx.Query("backend"))
 
-	data, err := cli.FsList(ctx, &emby.FsListReq{
+	data, err := cli.FsList(ctx.Request.Context(), &emby.FsListReq{
 		Host:       aucd.Host,
 		Path:       req.Path,
 		Token:      aucd.APIKey,

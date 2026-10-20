@@ -436,6 +436,12 @@ func ForceColor() bool {
 }
 
 func GetPageAndMax(ctx *gin.Context) (page, _max int, err error) {
+	return GetPageAndMaxWithLimit(ctx, 100)
+}
+
+// Directory sorting can fetch a bounded snapshot in one upstream request.
+// Other paginated APIs retain their usual 100-item limit.
+func GetPageAndMaxWithLimit(ctx *gin.Context, limit int) (page, _max int, err error) {
 	_max, err = strconv.Atoi(ctx.DefaultQuery("max", "10"))
 	if err != nil {
 		return 0, 0, errors.New("max must be a number")
@@ -452,8 +458,8 @@ func GetPageAndMax(ctx *gin.Context) (page, _max int, err error) {
 
 	if _max <= 0 {
 		_max = 10
-	} else if _max > 100 {
-		_max = 100
+	} else if _max > limit {
+		_max = limit
 	}
 
 	return page, _max, err

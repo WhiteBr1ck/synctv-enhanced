@@ -33,7 +33,12 @@ jobs:
         working-directory: synctv-web
         run: npm run build
       - name: Test subtitles, transport and directory sorting
-        run: node --test subtitle-gateway/gateway.test.mjs subtitle-gateway/timed-text.test.mjs subtitle-gateway/list-sort.test.mjs
+        run: node --test subtitle-gateway/gateway.test.mjs subtitle-gateway/timed-text.test.mjs subtitle-gateway/list-sort.test.mjs subtitle-gateway/chat-history.test.mjs
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Test chat persistence and directory request limits
+        run: go test ./internal/db ./utils
   images:
     needs: checks
     runs-on: ubuntu-latest

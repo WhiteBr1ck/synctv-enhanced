@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { sortedPage } from "@/utils/list-sort";
 import { ElNotification, ElMessage } from "element-plus";
 import index from "./index.vue";
@@ -30,11 +30,19 @@ const openDialog = async () => {
   await getFileList("", 1, 10);
 };
 
-const { execute, state, isLoading: apiLoading } = getAListFileList();
+const { execute, state } = getAListFileList();
 const sorting = ref(false);
-const isLoading = computed(() => apiLoading.value || sorting.value);
+const isLoading = computed(() => sorting.value);
+let listingGeneration = 0;
+let listingRequest: AbortController | undefined;
+const cancelListing = () => { ++listingGeneration; listingRequest?.abort(); sorting.value = false; };
+onBeforeUnmount(cancelListing);
+watch(open, value => { if (!value) cancelListing(); });
 
 const getFileList = async (path: string, page: number, max: number, keyword?: string, sort?: string) => {
+  const generation = ++listingGeneration;
+  listingRequest?.abort();
+  const controller = listingRequest = new AbortController();
   sorting.value = true;
   try {
     const load = async (page: number, max: number) => {
@@ -44,23 +52,28 @@ const getFileList = async (path: string, page: number, max: number, keyword?: st
         path: path,
         keyword: keyword || ""
       },
+      signal: controller.signal,
       params: {
         page: page,
         max: max
       }
       });
+      if (generation !== listingGeneration) throw new Error('目录已切换');
       if (!state.value) throw new Error("没有收到文件列表");
       return state.value;
     };
-    state.value = await sortedPage(load, page, max, sort || localStorage.getItem("synctv:alist-sort") || "original", (item: FileItem) => item);
+    const result = await sortedPage(load, page, max, sort || localStorage.getItem("synctv:alist-sort") || "original", (item: FileItem) => item);
+    if (generation === listingGeneration) state.value = result;
   } catch (err: any) {
+    if (generation !== listingGeneration) return;
+    state.value ??= { items: [], total: 0, paths: [] };
     return ElNotification({
       type: "error",
       title: "错误",
       message: err.response?.data?.error || err.message
     });
   } finally {
-    sorting.value = false;
+    if (generation === listingGeneration) sorting.value = false;
   }
 };
 

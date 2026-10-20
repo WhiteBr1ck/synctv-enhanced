@@ -1,4 +1,9 @@
 import { useDefineApi } from "@/stores/useDefineApi";
+import type { StoredChatMessage } from "@/utils/chat-history";
+
+export const chatHistoryApi = useDefineApi<{
+  headers: { Authorization: string; "X-Room-Id": string };
+}, StoredChatMessage[]>({ url: "/api/room/chat/history", method: "GET" });
 import type {
   MEMBER_ROLE,
   MEMBER_STATUS,

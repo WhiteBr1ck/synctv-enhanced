@@ -234,7 +234,7 @@ func Movies(ctx *gin.Context) {
 		return
 	}
 
-	page, _max, err := utils.GetPageAndMax(ctx)
+	page, _max, err := utils.GetPageAndMaxWithLimit(ctx, 10000)
 	if err != nil {
 		log.Errorf("get page and max error: %v", err)
 		ctx.AbortWithStatusJSON(http.StatusBadRequest, model.NewAPIErrorResp(err))
@@ -260,7 +260,7 @@ func Movies(ctx *gin.Context) {
 
 		if mv.IsDynamicFolder() {
 			resp, err := listVendorDynamicMovie(
-				ctx,
+				ctx.Request.Context(),
 				user,
 				room,
 				mv,

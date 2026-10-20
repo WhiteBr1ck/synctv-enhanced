@@ -6,6 +6,8 @@
 - ASS 使用 libass 渲染样式与字体；SRT 支持中途加载、拖动进度与语言切换。
 - 名称、修改时间、类型、大小与升降序分别选择，文件夹优先、数字自然排序、记住选择。
 - 完整目录先排序再分页（最多 10000 项）；普通房间列表另有添加时间排序。
+- Jellyfin/Emby 目录一次读取后排序，避免为一个大型媒体库连续请求几十页。
+- 聊天消息按房间保存在服务器，保留最近 500 条，退出、换设备或容器重启后自动恢复。
 - 两个服务通过一份 Compose 启动，沿用 v0.9.15 的 SQLite 数据结构。
 
 ## Docker 部署
@@ -18,15 +20,17 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.1` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.2` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.1
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.1
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.2
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.2
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
 `./data` 保存账号和房间数据，`./data/subtitle-cache` 是自动生成和清理的字幕缓存。
+聊天记录保存在同一数据库的独立表内，仅通过房间原有的访问验证后可读取；删除房间时一并清理。
+旧版已经丢失的聊天记录无法恢复，播放器临时状态提示不写入聊天历史。
 用户无需寻找或管理外挂字幕；视频不会因为字幕处理而重新编码。
 
 ## 更新、回退与迁移
@@ -59,7 +63,8 @@ Docker 会自动编译前端、后端和字幕服务，无需额外安装 Node.j
 直接运行测试时需安装 Node.js 24 与 FFmpeg：
 
 ```sh
-node --test subtitle-gateway/gateway.test.mjs subtitle-gateway/timed-text.test.mjs subtitle-gateway/list-sort.test.mjs
+node --test subtitle-gateway/gateway.test.mjs subtitle-gateway/timed-text.test.mjs subtitle-gateway/list-sort.test.mjs subtitle-gateway/chat-history.test.mjs
+go test ./internal/db ./utils
 ```
 
 ## 自动发布

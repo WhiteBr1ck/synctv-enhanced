@@ -1,4 +1,4 @@
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useLocalStorage } from "@vueuse/core";
 import { sortedPage } from "@/utils/list-sort";
 import { ElNotification } from "element-plus";
@@ -30,6 +30,8 @@ export const useMovieApi = (token: string, roomId: string) => {
   const saveMovieSort = () => { savedMovieSort.value = movieSort.value; };
   const sorting = ref(false);
   let listingGeneration = 0;
+  let listingRequest: AbortController | undefined;
+  onBeforeUnmount(() => { ++listingGeneration; listingRequest?.abort(); });
 
   const switchDir = async (id: string, subPath?: string) => {
     currentPage.value = 1;
@@ -38,10 +40,14 @@ export const useMovieApi = (token: string, roomId: string) => {
   };
 
   // 获取影片列表
-  const { state: movies, isLoading: apiMoviesLoading, execute: reqMoviesApi } = moviesApi();
-  const moviesLoading = computed(() => apiMoviesLoading.value || sorting.value);
+  const { state: movies, execute: reqMoviesApi } = moviesApi();
+  const moviesLoading = computed(() => sorting.value);
   const getMovies = async (id?: string, subPath?: string, keyword?: string) => {
     const generation = ++listingGeneration;
+    listingRequest?.abort();
+    const controller = listingRequest = new AbortController();
+    const folderId = id === undefined ? room.lastFolderId : id;
+    const folderSubPath = subPath === undefined ? room.lastFolderSubPath : subPath;
     sorting.value = true;
     if (keyword && movieSort.value.startsWith("modified-")) movieSort.value = "name-asc";
     try {
@@ -50,14 +56,15 @@ export const useMovieApi = (token: string, roomId: string) => {
         params: {
           page,
           max,
-          subPath: subPath === undefined ? room.lastFolderSubPath : subPath,
-          id: id === undefined ? room.lastFolderId : id,
+          subPath: folderSubPath,
+          id: folderId,
           keyword: keyword
         },
         headers: {
           Authorization: token,
           "X-Room-Id": roomId
-        }
+        },
+        signal: controller.signal
         });
         if (generation !== listingGeneration) throw new Error("目录已切换");
         if (!movies.value) throw new Error("没有收到影片列表");

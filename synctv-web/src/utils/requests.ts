@@ -6,9 +6,10 @@ axios.interceptors.response.use(
     return response;
   },
   function (error) {
-    if (error.response.status === 401) {
+    if (error.response?.status === 401) {
       if (
         error.config.url.startsWith("/api/room/movie") ||
+        error.config.url.startsWith("/api/room/chat") ||
         error.config.url.startsWith("/api/room/delete") ||
         error.config.url.startsWith("/api/room/pwd") ||
         error.config.url.startsWith("/api/room/me")

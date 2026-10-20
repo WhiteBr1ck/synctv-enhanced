@@ -144,7 +144,7 @@ const fileMetadataSortAvailable = computed(() => dynamic.value && room.movies.so
       <div
         v-else
         v-for="item in room.movies"
-        :key="item.base!.name"
+        :key="item.id + ':' + (item.subPath || '')"
         class="flex justify-around mb-2 rounded-lg bg-zinc-50 hover:bg-white transition-all dark:bg-zinc-800 hover:dark:bg-neutral-800"
       >
         <div class="m-auto pl-2">

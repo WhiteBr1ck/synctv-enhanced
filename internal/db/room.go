@@ -154,8 +154,13 @@ func UpdateRoomSettings(roomID string, settings map[string]any) (*model.RoomSett
 }
 
 func DeleteRoomByID(roomID string) error {
-	result := db.Unscoped().Select(clause.Associations).Delete(&model.Room{ID: roomID})
-	return HandleUpdateResult(result, ErrRoomNotFound)
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.ChatMessage{}).Error; err != nil {
+			return err
+		}
+		result := tx.Unscoped().Select(clause.Associations).Delete(&model.Room{ID: roomID})
+		return HandleUpdateResult(result, ErrRoomNotFound)
+	})
 }
 
 func SetRoomPassword(roomID, password string) error {

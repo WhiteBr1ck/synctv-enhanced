@@ -1,7 +1,7 @@
 name: synctv-enhanced
 services:
   synctv:
-    image: ${SYNCTV_IMAGE_PREFIX:-ghcr.io/whitebr1ck/synctv-enhanced}:${SYNCTV_TAG:-0.9.15-enhanced.1}
+    image: ${SYNCTV_IMAGE_PREFIX:-ghcr.io/whitebr1ck/synctv-enhanced}:${SYNCTV_TAG:-0.9.15-enhanced.2}
     restart: unless-stopped
     ports:
       - "${SYNCTV_PORT:-8080}:8080/udp"
@@ -13,7 +13,7 @@ services:
       UMASK: ${UMASK:-022}
       TZ: ${TZ:-Asia/Shanghai}
   subtitles:
-    image: ${SYNCTV_IMAGE_PREFIX:-ghcr.io/whitebr1ck/synctv-enhanced}-subtitles:${SYNCTV_TAG:-0.9.15-enhanced.1}
+    image: ${SYNCTV_IMAGE_PREFIX:-ghcr.io/whitebr1ck/synctv-enhanced}-subtitles:${SYNCTV_TAG:-0.9.15-enhanced.2}
     restart: unless-stopped
     depends_on:
       - synctv

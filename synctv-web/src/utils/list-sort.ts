@@ -42,11 +42,12 @@ export async function sortedPage<T, R extends { items: T[]; total: number }>(
   decorate?: (items: T[]) => Promise<void>
 ): Promise<R> {
   if (sort === 'original') return load(page, max);
-  const first = await load(1, 100);
+  const batchSize = 10000;
+  const first = await load(1, batchSize);
   if (first.total > 10000) throw new Error('目录超过 10000 项，请进入子目录后排序');
   const items = [...(first.items || [])];
   for (let next = 2; items.length < first.total; next++) {
-    const result = await load(next, 100);
+    const result = await load(next, batchSize);
     if (!result.items.length) break;
     items.push(...result.items);
   }

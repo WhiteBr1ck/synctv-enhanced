@@ -17,7 +17,10 @@ type EmbyMeResp = model.VendorMeResp[*emby.SystemInfoResp]
 func Me(ctx *gin.Context) {
 	user := middlewares.GetUserEntry(ctx).Value()
 
-	serverID := ctx.Query("serverID")
+	serverID := ctx.Query("serverId")
+	if serverID == "" {
+		serverID = ctx.Query("serverID")
+	}
 	if serverID == "" {
 		ctx.AbortWithStatusJSON(
 			http.StatusBadRequest,

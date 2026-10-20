@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
@@ -18,6 +19,7 @@ import (
 )
 
 type Room struct {
+	chatMu  sync.Mutex
 	current *current
 	hub     atomic.Pointer[Hub]
 	movies  *movies

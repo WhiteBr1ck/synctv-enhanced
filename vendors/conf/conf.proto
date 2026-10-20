@@ -1,0 +1,66 @@
+syntax = "proto3";
+package kratos.api;
+
+option go_package = "vendors/internal/conf;conf";
+
+import "google/protobuf/duration.proto";
+
+message Registry {
+  message Consul {
+    string scheme = 1;                    // @gotags: env:"CONSUL_SCHEME"
+    string addr = 2;                      // @gotags: env:"CONSUL_ADDR"
+    string prefix = 3;                    // @gotags: env:"CONSUL_PREFIX"
+    google.protobuf.Duration timeout = 4; // @gotags: env:"CONSUL_TIMEOUT"
+  }
+  message Etcd {
+    string endpoint = 1;                  // @gotags: env:"ETCD_ENDPOINT"
+    string username = 2;                  // @gotags: env:"ETCD_USERNAME"
+    string password = 3;                  // @gotags: env:"ETCD_PASSWORD"
+    google.protobuf.Duration timeout = 4; // @gotags: env:"ETCD_TIMEOUT"
+  }
+  Consul consul = 1;
+  Etcd etcd = 2;
+}
+
+message WebServer {
+  message TLS {
+    string cert_file = 1; // @gotags: env:"WEB_CERT_FILE"
+    string key_file = 2;  // @gotags: env:"WEB_KEY_FILE"
+    string ca_file = 3;   // @gotags: env:"WEB_CA_FILE"
+  }
+  string addr = 1; // @gotags: env:"WEB_ADDR"
+  TLS tls = 2;
+  string custom_endpoint = 3; // @gotags: env:"WEB_CUSTOM_ENDPOINT"
+  string service_name = 6;    // @gotags: env:"SERVICE_NAME"
+}
+
+message GrpcServer {
+  message TLS {
+    string cert_file = 1; // @gotags: env:"GRPC_CERT_FILE"
+    string key_file = 2;  // @gotags: env:"GRPC_KEY_FILE"
+    string ca_file = 3;   // @gotags: env:"GRPC_CA_FILE"
+  }
+  string addr = 1; // @gotags: env:"GRPC_ADDR"
+  TLS tls = 2;
+  string custom_endpoint = 3;           // @gotags: env:"GRPC_CUSTOM_ENDPOINT"
+  google.protobuf.Duration timeout = 4; // @gotags: env:"SERVER_TIMEOUT"
+  string jwt_secret = 5;                // @gotags: env:"SERVER_JWT_SECRET"
+  string service_name = 6;              // @gotags: env:"SERVICE_NAME"
+}
+
+message BilibiliConfig {}
+
+message AlistConfig {}
+
+message EmbyConfig {}
+
+message WebdavConfig {}
+
+message AllServer {
+  GrpcServer server = 1;
+  Registry registry = 2;
+  BilibiliConfig bilibili = 3;
+  AlistConfig alist = 4;
+  EmbyConfig emby = 5;
+  WebdavConfig webdav = 6;
+}

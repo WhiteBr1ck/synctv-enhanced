@@ -20,11 +20,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.2` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.3` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.2
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.2
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.3
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.3
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
@@ -52,13 +52,13 @@ Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
 ## 从源码构建
 
 ```sh
-git clone --recurse-submodules -b enhanced-v0.9.15 https://github.com/WhiteBr1ck/synctv-enhanced.git
+git clone -b enhanced-v0.9.15 https://github.com/WhiteBr1ck/synctv-enhanced.git
 cd synctv-enhanced
 docker compose -f compose.yaml -f compose.build.yaml build
 docker compose -f compose.yaml -f compose.build.yaml up -d --no-build
 ```
 
-修改后的前端直接纳入 `synctv-web/`，`vendors/` 保留为固定提交的子模块。
+修改后的前端直接纳入 `synctv-web/`；`vendors/` 也纳入源码，保留原许可证，并精简 Jellyfin 目录请求中的播放源数据。
 Docker 会自动编译前端、后端和字幕服务，无需额外安装 Node.js 或 Go。
 直接运行测试时需安装 Node.js 24 与 FFmpeg：
 
@@ -78,7 +78,7 @@ go test ./internal/db ./utils
 
 - 后端：[synctv-org/synctv](https://github.com/synctv-org/synctv)，基于 `v0.9.15`（`ff29d6ef8bbaae2568807e9ae425ae6d3b3cf60a`），保留 Git 历史和根目录 `LICENSE`。
 - 前端：[synctv-org/synctv-web](https://github.com/synctv-org/synctv-web)，基于 `4cdec2decfbd66b9ebd77bf8559cd0c696023583`，许可证保留在 `synctv-web/LICENSE`。
-- vendors：[synctv-org/vendors](https://github.com/synctv-org/vendors)，固定为 `2b77d56e38e089af556ddae0d21aafc803b886ea`。
+- vendors：[synctv-org/vendors](https://github.com/synctv-org/vendors)，基于 `2b77d56e38e089af556ddae0d21aafc803b886ea`，保留在 `vendors/`，许可证为 `vendors/LICENSE`。
 - 原版说明保留在 `README.upstream.md` 及存在时的 `README-CN.upstream.md`。
 
 这是独立维护的增强版 fork，并非上游官方发行版。

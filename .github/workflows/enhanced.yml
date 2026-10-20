@@ -38,7 +38,9 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Test chat persistence and directory request limits
-        run: go test ./internal/db ./utils
+        run: |
+          go test ./internal/db ./utils
+          (cd vendors && go test ./service/emby)
   images:
     needs: checks
     runs-on: ubuntu-latest

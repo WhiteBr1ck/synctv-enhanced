@@ -288,6 +288,7 @@ func (s *EmbyVendorService) GenMovieInfo(
 	}
 
 	movie.URL = data.Sources[0].URL
+	movie.PlaybackMode = playbackMode(data.Sources[0].IsTranscode)
 	for _, s := range data.Sources[0].Subtitles {
 		if movie.Subtitles == nil {
 			movie.Subtitles = make(map[string]*dbModel.Subtitle, len(data.Sources[0].Subtitles))
@@ -302,8 +303,9 @@ func (s *EmbyVendorService) GenMovieInfo(
 	for _, s := range data.Sources[1:] {
 		movie.MoreSources = append(movie.MoreSources,
 			&dbModel.MoreSource{
-				Name: s.Name,
-				URL:  s.URL,
+				Name:         s.Name,
+				URL:          s.URL,
+				PlaybackMode: playbackMode(s.IsTranscode),
 			},
 		)
 
@@ -369,12 +371,14 @@ func (s *EmbyVendorService) GenProxyMovieInfo(
 		if si == 0 {
 			movie.URL = u.String()
 			movie.Type = utils.GetURLExtension(es.URL)
+			movie.PlaybackMode = playbackMode(es.IsTranscode)
 		} else {
 			movie.MoreSources = append(movie.MoreSources,
 				&dbModel.MoreSource{
-					Name: es.Name,
-					URL:  u.String(),
-					Type: utils.GetURLExtension(es.URL),
+					Name:         es.Name,
+					URL:          u.String(),
+					Type:         utils.GetURLExtension(es.URL),
+					PlaybackMode: playbackMode(es.IsTranscode),
 				},
 			)
 		}
@@ -406,4 +410,12 @@ func (s *EmbyVendorService) GenProxyMovieInfo(
 	}
 
 	return movie, nil
+}
+
+// Report the media server's chosen route without changing its playback decision.
+func playbackMode(transcode bool) string {
+	if transcode {
+		return "transcode"
+	}
+	return "direct"
 }

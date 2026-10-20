@@ -64,28 +64,30 @@ func (m *Movie) BeforeSave(tx *gorm.DB) error {
 }
 
 type MoreSource struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-	URL  string `json:"url"`
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	URL          string `json:"url"`
+	PlaybackMode string `json:"playbackMode,omitempty"`
 }
 
 type MovieBase struct {
-	FileSize    uint64               `gorm:"-" json:"fileSize,omitempty"`
-	ModifiedAt  uint64               `gorm:"-" json:"modifiedAt,omitempty"`
-	VendorInfo  VendorInfo           `gorm:"embedded;embeddedPrefix:vendor_info_" json:"vendorInfo,omitempty"`
-	Headers     map[string]string    `gorm:"serializer:fastjson;type:text"        json:"headers,omitempty"`
-	Subtitles   map[string]*Subtitle `gorm:"serializer:fastjson;type:text"        json:"subtitles,omitempty"`
-	URL         string               `gorm:"type:text"                            json:"url"`
-	Name        string               `gorm:"not null;type:text"                   json:"name"`
-	Type        string               `                                            json:"type"`
-	ParentID    EmptyNullString      `gorm:"type:char(32)"                        json:"parentId"`
-	MoreSources []*MoreSource        `gorm:"serializer:fastjson;type:text"        json:"moreSources,omitempty"`
-	Danmu       string               `gorm:"type:text"                            json:"danmu"`
-	StreamDanmu string               `gorm:"type:text"                            json:"streamDanmu"`
-	Live        bool                 `                                            json:"live"`
-	Proxy       bool                 `                                            json:"proxy"`
-	RtmpSource  bool                 `                                            json:"rtmpSource"`
-	IsFolder    bool                 `                                            json:"isFolder"`
+	PlaybackMode string               `gorm:"-" json:"playbackMode,omitempty"`
+	FileSize     uint64               `gorm:"-" json:"fileSize,omitempty"`
+	ModifiedAt   uint64               `gorm:"-" json:"modifiedAt,omitempty"`
+	VendorInfo   VendorInfo           `gorm:"embedded;embeddedPrefix:vendor_info_" json:"vendorInfo,omitempty"`
+	Headers      map[string]string    `gorm:"serializer:fastjson;type:text"        json:"headers,omitempty"`
+	Subtitles    map[string]*Subtitle `gorm:"serializer:fastjson;type:text"        json:"subtitles,omitempty"`
+	URL          string               `gorm:"type:text"                            json:"url"`
+	Name         string               `gorm:"not null;type:text"                   json:"name"`
+	Type         string               `                                            json:"type"`
+	ParentID     EmptyNullString      `gorm:"type:char(32)"                        json:"parentId"`
+	MoreSources  []*MoreSource        `gorm:"serializer:fastjson;type:text"        json:"moreSources,omitempty"`
+	Danmu        string               `gorm:"type:text"                            json:"danmu"`
+	StreamDanmu  string               `gorm:"type:text"                            json:"streamDanmu"`
+	Live         bool                 `                                            json:"live"`
+	Proxy        bool                 `                                            json:"proxy"`
+	RtmpSource   bool                 `                                            json:"rtmpSource"`
+	IsFolder     bool                 `                                            json:"isFolder"`
 }
 
 func (m *MovieBase) IsM3u8() bool {
@@ -96,9 +98,10 @@ func (m *MovieBase) Clone() *MovieBase {
 	mss := make([]*MoreSource, len(m.MoreSources))
 	for i, ms := range m.MoreSources {
 		mss[i] = &MoreSource{
-			Name: ms.Name,
-			Type: ms.Type,
-			URL:  ms.URL,
+			Name:         ms.Name,
+			Type:         ms.Type,
+			URL:          ms.URL,
+			PlaybackMode: ms.PlaybackMode,
 		}
 	}
 
@@ -116,18 +119,19 @@ func (m *MovieBase) Clone() *MovieBase {
 	}
 
 	return &MovieBase{
-		URL:         m.URL,
-		MoreSources: mss,
-		Name:        m.Name,
-		Live:        m.Live,
-		Proxy:       m.Proxy,
-		RtmpSource:  m.RtmpSource,
-		Type:        m.Type,
-		Headers:     hds,
-		Subtitles:   sbs,
-		VendorInfo:  m.VendorInfo,
-		IsFolder:    m.IsFolder,
-		ParentID:    m.ParentID,
+		PlaybackMode: m.PlaybackMode,
+		URL:          m.URL,
+		MoreSources:  mss,
+		Name:         m.Name,
+		Live:         m.Live,
+		Proxy:        m.Proxy,
+		RtmpSource:   m.RtmpSource,
+		Type:         m.Type,
+		Headers:      hds,
+		Subtitles:    sbs,
+		VendorInfo:   m.VendorInfo,
+		IsFolder:     m.IsFolder,
+		ParentID:     m.ParentID,
 	}
 }
 

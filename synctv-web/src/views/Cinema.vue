@@ -32,6 +32,7 @@ import { userStore } from "@/stores/user";
 import { roomInfoApi, chatHistoryApi } from "@/services/apis/room";
 import { CHAT_HISTORY_LIMIT, chatText, mergeChatHistory, type ChatEntry } from "@/utils/chat-history";
 import { artplayerSubtitle } from "@/plugins/subtitle";
+import { artplayerVideoInfo } from "@/plugins/video-info";
 import { sendDanmu, artplayerStreamDanmu } from "@/plugins/danmu";
 import { indexStore } from "@/stores";
 
@@ -191,12 +192,14 @@ const playerOption = computed<options>(() => {
         {
           url: option.url,
           html: "默认",
-          type: option.type || ""
+          type: option.type || "",
+          playbackMode: room.currentMovie.base!.playbackMode
         },
         ...obj.map((item) => ({
           url: item.url,
           html: item.name,
-          type: item.type
+          type: item.type,
+          playbackMode: item.playbackMode
         }))
       ])
     );
@@ -215,6 +218,7 @@ const playerOption = computed<options>(() => {
     option.plugins!.push(artplayerStreamDanmu(room.currentMovie.base!.streamDanmu));
   }
 
+  option.plugins!.push(artplayerVideoInfo(room.currentMovie.base!));
   return option;
 });
 
@@ -242,18 +246,21 @@ const updateSources = async () => {
     if (!player) return;
     room.currentExpireId = currentMovie.value.expireId;
     const moreSources = currentMovie.value.movie.base.moreSources || [];
-    player.plugins["source"].updateSources([
+    player.plugins["source"]?.updateSources([
       {
         url: currentMovie.value.movie.base.url,
         html: "默认",
-        type: currentMovie.value.movie.base.type || ""
+        type: currentMovie.value.movie.base.type || "",
+        playbackMode: currentMovie.value.movie.base.playbackMode
       },
       ...moreSources.map((item) => ({
         url: item.url,
         html: item.name,
-        type: item.type
+        type: item.type,
+        playbackMode: item.playbackMode
       }))
     ]);
+    player.plugins.videoInfo?.updateContext(currentMovie.value.movie.base);
   } catch (err: any) {
     console.log(err);
     ElNotification({

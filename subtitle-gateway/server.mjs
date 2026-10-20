@@ -32,10 +32,11 @@ export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http:
       if (pathname === '/_synctv/health') return json(res, 200, { status: 'ok', embeddedSubtitles: true });
       if (pathname.startsWith('/_synctv/subtitles/')) {
         if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Method not allowed' });
-        const match = /^\/_synctv\/subtitles\/([a-f0-9]{64})\/(tracks|track-(\d+)\.(ass|srt|vtt)|font-(\d+))$/.exec(pathname);
+        const match = /^\/_synctv\/subtitles\/([a-f0-9]{64})\/(tracks|info|track-(\d+)\.(ass|srt|vtt)|font-(\d+))$/.exec(pathname);
         const source = match && store.get(match[1]);
         if (!source) return json(res, 404, { error: '字幕会话已过期，请重新打开视频' });
         if (match[2] === 'tracks') return json(res, 200, { tracks: await store.tracks(source) });
+        if (match[2] === 'info') { await store.tracks(source); return json(res, 200, source.info); }
         const isFont = match[5] !== undefined;
         const file = isFont ? await store.font(source, Number(match[5])) : await store.file(source, Number(match[3]), match[4]);
         const info = await stat(file);
@@ -93,6 +94,7 @@ export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http:
               const discovery = store.register(movie, req.headers);
               if (discovery) {
                 movie.base.embeddedSubtitleSource = discovery;
+                movie.base.mediaInfoSource = discovery.replace(/\/tracks$/, '/info');
                 movie.base.preferEmbeddedSubtitles = movie.base.vendorInfo?.vendor === 'emby';
               }
               body = Buffer.from(JSON.stringify(value));

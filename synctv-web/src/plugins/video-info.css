@@ -1,0 +1,40 @@
+.art-video-player .art-info.synctv-video-info {
+  box-sizing: border-box;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  padding-right: 24px;
+}
+.synctv-video-info .synctv-video-info-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  margin-top: 5px;
+  padding-top: 9px;
+}
+.art-video-player .synctv-video-info .art-info-panel {
+  width: 360px;
+  max-width: 100%;
+  min-width: 0;
+}
+.art-video-player .synctv-video-info .art-info-title {
+  flex: 0 0 100px;
+}
+.art-video-player .synctv-video-info .art-info-content {
+  min-width: 0;
+  flex: 1;
+}
+.art-video-player .art-info.synctv-video-info .art-info-panel .synctv-video-info-extra .art-info-content {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  flex: 1;
+}
+.synctv-video-info-note {
+  max-width: 355px;
+  line-height: 1.5;
+  opacity: 0.75;
+}

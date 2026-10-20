@@ -8,6 +8,7 @@
 - 完整目录先排序再分页（最多 10000 项）；普通房间列表另有添加时间排序。
 - Jellyfin/Emby 目录一次读取后排序，避免为一个大型媒体库连续请求几十页。
 - 聊天消息按房间保存在服务器，保留最近 500 条，退出、换设备或容器重启后自动恢复。
+- 播放器右键“统计信息”显示片源编码、分辨率、位深、帧率、HDR 色彩标记、本机 HDR 能力及媒体服务器播放方式。
 - 两个服务通过一份 Compose 启动，沿用 v0.9.15 的 SQLite 数据结构。
 
 ## Docker 部署
@@ -20,11 +21,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.3` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.4` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.3
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.3
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.4
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.4
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
@@ -48,6 +49,9 @@ Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
 - Emby/Jellyfin 目录提供名称和类型排序。
 - 仅有 HLS/DASH 转码流时，字幕需由媒体服务器提供或烧录。
 - PGS/VobSub 图片字幕不在本版文字字幕范围内；本版不提供 HEVC 视频转码。
+- HDR 使用浏览器原生播放链路，不增加 HDR→SDR 转换。能力检测不是实际 HDR 输出的确认；不同设备分别检测。
+- 片源探测复用 AList/OpenList、Emby/Jellyfin 原文件的字幕探测结果，按需读取；HLS/DASH 或其他来源未提供信息时显示未知。
+- 媒体服务器的“转换流”可能包含转封装或转码；该状态来自原有播放决策，本版只展示状态。
 
 ## 从源码构建
 
@@ -63,7 +67,7 @@ Docker 会自动编译前端、后端和字幕服务，无需额外安装 Node.j
 直接运行测试时需安装 Node.js 24 与 FFmpeg：
 
 ```sh
-node --test subtitle-gateway/gateway.test.mjs subtitle-gateway/timed-text.test.mjs subtitle-gateway/list-sort.test.mjs subtitle-gateway/chat-history.test.mjs
+node --test subtitle-gateway/gateway.test.mjs subtitle-gateway/timed-text.test.mjs subtitle-gateway/list-sort.test.mjs subtitle-gateway/chat-history.test.mjs subtitle-gateway/video-info.test.mjs
 go test ./internal/db ./utils
 ```
 

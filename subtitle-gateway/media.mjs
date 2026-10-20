@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rename, rm, stat, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { videoInfo } from './video-info.mjs';
 
 const codecs = { ass: 'ass', ssa: 'ass', subrip: 'srt', srt: 'srt', mov_text: 'srt', text: 'srt', webvtt: 'vtt' };
 const maxSubtitle = 15 * 1024 * 1024;
@@ -93,7 +94,8 @@ export class MediaStore {
     }
     const proxyIdentity = url.origin === this.upstream.origin && url.pathname.startsWith('/api/room/movie/proxy/')
       ? JSON.stringify([movie.id, movie.subPath || '']) : '';
-    const fingerprint = url.href + JSON.stringify(headers) + proxyIdentity;
+    const sourceIndex = media === base ? 0 : (base.moreSources || []).indexOf(media) + 1;
+    const fingerprint = JSON.stringify([url.href, headers, proxyIdentity, sourceIndex]);
     const key = createHash('sha256').update(this.secret).update(fingerprint).digest('hex');
     let expires = Date.now() + ttl;
     // The upstream has already authenticated this request. Limit the new capability
@@ -107,7 +109,8 @@ export class MediaStore {
     if (!source) {
       const cacheKey = createHash('sha256').update(fingerprint).digest('hex');
       source = { key, url: url.href, headers, dir: path.join(this.cacheDir, cacheKey), tracks: null,
-        pendingTracks: null, pendingFiles: new Map(), attachments: [], expires, busy: 0 };
+        pendingTracks: null, pendingFiles: new Map(), attachments: [], expires, busy: 0,
+        sourceIndex };
       this.sources.set(key, source);
     }
     source.expires = expires;
@@ -132,9 +135,11 @@ export class MediaStore {
       source.pendingTracks = this.jobs.run(async () => {
         const output = await run(this.ffprobe, ['-v', 'error', ...inputArgs(source),
           '-probesize', '5242880', '-analyzeduration', '5000000',
-          '-show_entries', 'stream=index,codec_name,codec_type:stream_tags=language,title,filename,mimetype:stream_disposition=default,forced',
+          '-show_entries', 'format=format_name:stream=index,codec_name,codec_type,profile,width,height,pix_fmt,bits_per_raw_sample,avg_frame_rate,r_frame_rate,bit_rate,color_space,color_transfer,color_primaries:stream_side_data:stream_tags=language,title,filename,mimetype:stream_disposition=default,forced,attached_pic',
           '-of', 'json', source.url]);
-        const streams = JSON.parse(output.toString()).streams || [];
+        const probe = JSON.parse(output.toString());
+        const streams = probe.streams || [];
+        source.info = { video: videoInfo(probe), container: probe.format?.format_name, sourceIndex: source.sourceIndex };
         source.attachments = streams.filter(stream => stream.codec_type === 'attachment' &&
           (/^(ttf|otf)$/.test(stream.codec_name || '') || /\.(ttf|otf)$/i.test(stream.tags?.filename || ''))).slice(0, 16);
         const fonts = source.attachments.map(stream => `/_synctv/subtitles/${source.key}/font-${stream.index}`);

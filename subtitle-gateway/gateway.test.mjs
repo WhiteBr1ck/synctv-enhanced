@@ -29,6 +29,10 @@ before(async () => {
     '-metadata:s:t', 'mimetype=application/x-truetype-font', path.join(temp, 'movie.mkv')]);
   ffmpeg(['-i', path.join(temp, 'movie.mkv'), '-map', '0:v', '-map', '0:s:1', '-c:v', 'copy', '-c:s', 'mov_text',
     '-movflags', '+faststart', path.join(temp, 'movie.mp4')]);
+  ffmpeg(['-f', 'lavfi', '-i', 'color=s=320x180:r=24:d=1', '-c:v', 'libx265', '-preset', 'ultrafast',
+    '-pix_fmt', 'yuv420p10le', '-tag:v', 'hvc1',
+    '-x265-params', 'pools=none:frame-threads=1:log-level=error:colorprim=9:transfer=16:colormatrix=9:hdr10=1',
+    path.join(temp, 'movie.hdr.mp4')]);
   await writeFile(path.join(temp, 'index.html'), '<html><body>Patched v0.9.15 UI</body></html>');
   upstream = http.createServer(async (req, res) => {
     if (req.url.startsWith('/media.')) {
@@ -102,6 +106,38 @@ test('discovers real MKV ASS and SRT tracks and reuses the probe', async () => {
   const previous = mediaRequests;
   assert.deepEqual(await (await fetch(origin + discovery)).json(), result);
   assert.equal(mediaRequests, previous);
+});
+
+test('returns allowlisted video metadata using the same authorized, cached probe as subtitles', async () => {
+  extension = 'mkv';
+  const discovery = await source();
+  await fetch(origin + discovery);
+  const previous = mediaRequests;
+  const response = await fetch(origin + discovery.replace(/\/tracks$/, '/info'));
+  assert.equal(response.status, 200);
+  const value = await response.json();
+  assert.equal(value.video.codec, 'h264');
+  assert.equal(value.video.width, 320);
+  assert.equal(value.video.height, 180);
+  assert.equal(value.video.bitDepth, 8);
+  assert.equal(value.video.frameRate, 24);
+  assert.equal(value.sourceIndex, 0);
+  assert.equal(mediaRequests, previous);
+  assert.doesNotMatch(JSON.stringify(value), /Authorization|TestBrowser|127\.0\.0\.1|api_key/);
+  assert.equal((await fetch(origin + '/_synctv/subtitles/' + '0'.repeat(64) + '/info')).status, 404);
+});
+
+test('identifies a real HEVC 10-bit PQ stream with no subtitle tracks', async () => {
+  extension = 'hdr.mp4';
+  try {
+    const discovery = await source();
+    const value = await (await fetch(origin + discovery.replace(/\/tracks$/, '/info'))).json();
+    assert.equal(value.video.codec, 'hevc');
+    assert.equal(value.video.bitDepth, 10);
+    assert.equal(value.video.dynamicRange, 'HDR / PQ');
+    assert.equal(value.video.colorPrimaries, 'bt2020');
+    assert.deepEqual((await (await fetch(origin + discovery)).json()).tracks, []);
+  } finally { extension = 'mkv'; }
 });
 test('reads ASS styles, SRT text and attached fonts without modifying the video', async () => {
   extension = 'mkv';

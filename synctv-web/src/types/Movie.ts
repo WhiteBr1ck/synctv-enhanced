@@ -25,9 +25,12 @@ export interface MoreSource {
   name: string;
   url: string;
   type: string;
+  playbackMode?: "direct" | "transcode";
 }
 
 export interface BaseMovieInfo {
+  playbackMode?: "direct" | "transcode";
+  mediaInfoSource?: string;
   url: string;
   moreSources?: MoreSource[];
   name: string;

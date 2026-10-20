@@ -5,6 +5,7 @@ interface artplayPluginSource {
   html: string;
   url: string;
   type: string;
+  playbackMode?: "direct" | "transcode";
 }
 
 const switchSource = (art: Artplayer, source: artplayPluginSource) => {
@@ -25,7 +26,9 @@ const switchSource = (art: Artplayer, source: artplayPluginSource) => {
 export function artplayPluginSource(sources: artplayPluginSource[]) {
   return (art: Artplayer) => {
     let currentSourceName = sources.length > 0 ? sources[0].html : "";
+    let currentSource = sources[0];
     const onSelect = (source: artplayPluginSource) => {
+      currentSource = source;
       currentSourceName = source.html;
       switchSource(art, source);
       return "源";
@@ -74,7 +77,8 @@ export function artplayPluginSource(sources: artplayPluginSource[]) {
     setSelector(sources);
     return {
       name: "source",
-      updateSources
+      updateSources,
+      currentSource: () => currentSource
     };
   };
 }

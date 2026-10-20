@@ -16,7 +16,7 @@ COPY . ./
 COPY --from=web-builder /web/dist/ ./public/dist/
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=v0.9.15-enhanced.3
+ARG VERSION=v0.9.15-enhanced.4
 ARG GIT_COMMIT=unknown
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GOMAXPROCS=4 \
@@ -37,7 +37,7 @@ CMD ["server"]
 FROM node:24-alpine AS gateway
 RUN apk add --no-cache ffmpeg tzdata
 WORKDIR /app
-COPY subtitle-gateway/server.mjs subtitle-gateway/media.mjs ./
+COPY subtitle-gateway/server.mjs subtitle-gateway/media.mjs subtitle-gateway/video-info.mjs ./
 COPY --from=web-builder /web/dist/ ./web/
 ENV NODE_ENV=production PORT=8080 SYNCTV_UPSTREAM=http://synctv:8080 CACHE_DIR=/cache TZ=Asia/Shanghai
 VOLUME ["/cache"]

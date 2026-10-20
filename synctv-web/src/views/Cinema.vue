@@ -33,6 +33,7 @@ import { roomInfoApi, chatHistoryApi } from "@/services/apis/room";
 import { CHAT_HISTORY_LIMIT, chatText, mergeChatHistory, type ChatEntry } from "@/utils/chat-history";
 import { artplayerSubtitle } from "@/plugins/subtitle";
 import { artplayerVideoInfo } from "@/plugins/video-info";
+import { artplayerEmbeddedAudio } from "@/plugins/audio";
 import { sendDanmu, artplayerStreamDanmu } from "@/plugins/danmu";
 import { indexStore } from "@/stores";
 
@@ -219,6 +220,7 @@ const playerOption = computed<options>(() => {
   }
 
   option.plugins!.push(artplayerVideoInfo(room.currentMovie.base!));
+  if (room.currentMovie.base!.embeddedSubtitleSource) option.plugins!.push(artplayerEmbeddedAudio(room.currentMovie.base!));
   return option;
 });
 
@@ -261,6 +263,7 @@ const updateSources = async () => {
       }))
     ]);
     player.plugins.videoInfo?.updateContext(currentMovie.value.movie.base);
+    player.plugins.audioCompat?.updateContext(currentMovie.value.movie.base);
   } catch (err: any) {
     console.log(err);
     ElNotification({

@@ -37,6 +37,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
     add("video", "片源视频");
     add("range", "片源动态范围");
     add("color", "片源色彩");
+    add("audio", "声音播放");
     add("display", "本机 HDR 能力", "浏览器报告的显示能力；不代表当前画面正在以 HDR 输出。");
     add("decode", "本机编码支持", "代表性编码规格的基础检测；不保证当前影片的封装、级别和完整规格都兼容。");
     const note = document.createElement("div");
@@ -58,6 +59,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       set("video", describeVideo(info?.video));
       set("range", info?.video?.dynamicRange || "未知");
       set("color", [info?.video?.colorPrimaries, info?.video?.colorTransfer, info?.video?.colorSpace].filter(Boolean).join(" / ") || "未标注");
+      set("audio", art.plugins?.audioCompat?.status?.() || "浏览器原生音频");
       let hdr: boolean | undefined;
       try { hdr = window.matchMedia("(dynamic-range: high)").matches; } catch { /* unavailable */ }
       set("display", hdr ? "浏览器报告支持 HDR" : "未报告 HDR 能力（未开启或检测不受支持）");

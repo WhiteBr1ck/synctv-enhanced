@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rename, rm, stat, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { videoInfo } from './video-info.mjs';
+import { videoInfo, audioInfo } from './video-info.mjs';
 
 const codecs = { ass: 'ass', ssa: 'ass', subrip: 'srt', srt: 'srt', mov_text: 'srt', text: 'srt', webvtt: 'vtt' };
 const maxSubtitle = 15 * 1024 * 1024;
@@ -63,6 +63,7 @@ export class MediaStore {
   sources = new Map();
   jobs = new Jobs();
   secret = randomBytes(32);
+  audioStreams = new Set();
   constructor({ upstream, cacheDir = '/cache', ffmpeg = 'ffmpeg', ffprobe = 'ffprobe' }) {
     this.upstream = new URL(upstream);
     this.cacheDir = path.resolve(cacheDir);
@@ -135,11 +136,15 @@ export class MediaStore {
       source.pendingTracks = this.jobs.run(async () => {
         const output = await run(this.ffprobe, ['-v', 'error', ...inputArgs(source),
           '-probesize', '5242880', '-analyzeduration', '5000000',
-          '-show_entries', 'format=format_name:stream=index,codec_name,codec_type,profile,width,height,pix_fmt,bits_per_raw_sample,avg_frame_rate,r_frame_rate,bit_rate,color_space,color_transfer,color_primaries:stream_side_data:stream_tags=language,title,filename,mimetype:stream_disposition=default,forced,attached_pic',
+          '-show_entries', 'format=format_name,duration:stream=index,codec_name,codec_type,profile,width,height,pix_fmt,bits_per_raw_sample,avg_frame_rate,r_frame_rate,bit_rate,color_space,color_transfer,color_primaries,channels,channel_layout,sample_rate:stream_side_data:stream_tags=language,title,filename,mimetype:stream_disposition=default,forced,attached_pic',
           '-of', 'json', source.url]);
         const probe = JSON.parse(output.toString());
         const streams = probe.streams || [];
-        source.info = { video: videoInfo(probe), container: probe.format?.format_name, sourceIndex: source.sourceIndex };
+        source.audioTracks = audioInfo(probe).map(track => ({ ...track,
+          url: `/_synctv/subtitles/${source.key}/audio-${track.index}.mp4` }));
+        source.duration = Number(probe.format?.duration) || undefined;
+        source.info = { video: videoInfo(probe), audioTracks: source.audioTracks,
+          container: probe.format?.format_name, sourceIndex: source.sourceIndex };
         source.attachments = streams.filter(stream => stream.codec_type === 'attachment' &&
           (/^(ttf|otf)$/.test(stream.codec_name || '') || /\.(ttf|otf)$/i.test(stream.tags?.filename || ''))).slice(0, 16);
         const fonts = source.attachments.map(stream => `/_synctv/subtitles/${source.key}/font-${stream.index}`);
@@ -192,6 +197,35 @@ export class MediaStore {
       source.pendingFiles.set(index, pending);
     }
     return source.pendingFiles.get(index);
+  }
+
+  streamAudio(source, index, start, rate, req, res) {
+    if (!source.audioTracks?.some(track => track.index === index)) throw new Error('音轨不存在');
+    if (this.audioStreams.size >= 8) throw new Error('兼容音频连接已满，请稍后重试');
+    source.busy++;
+    // Only audio is mapped. The original video URL and encoded video are untouched.
+    const child = spawn(this.ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error',
+      ...inputArgs(source), '-ss', String(start), '-readrate', String(Math.max(3, rate * 1.25)), '-i', source.url,
+      '-map', `0:${index}`, '-vn', '-sn', '-dn', '-c:a', 'aac', '-ac', '2', '-ar', '48000', '-b:a', '192k',
+      '-threads', '1', '-af', 'asetpts=PTS-STARTPTS', '-movflags', 'empty_moov+frag_keyframe+default_base_moof',
+      '-frag_duration', '500000', '-f', 'mp4', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    this.audioStreams.add(child);
+    res.writeHead(200, { 'Content-Type': 'audio/mp4', 'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff', 'X-Accel-Buffering': 'no' });
+    const kill = () => { if (child.exitCode === null) child.kill('SIGKILL'); };
+    const startup = setTimeout(() => { kill(); res.destroy(); }, 30000);
+    const expiry = setTimeout(() => { kill(); res.destroy(); }, Math.max(1, source.expires - Date.now()));
+    child.stdout.once('data', () => clearTimeout(startup));
+    child.stderr.resume();
+    child.once('error', () => res.destroy());
+    child.once('close', code => {
+      clearTimeout(startup); clearTimeout(expiry);
+      source.busy--; this.audioStreams.delete(child);
+      res.off('close', kill); req.off('aborted', kill);
+      if (code !== 0) res.destroy();
+    });
+    req.once('aborted', kill); res.once('close', kill);
+    child.stdout.pipe(res);
   }
 
   async font(source, index) {

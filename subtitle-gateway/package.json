@@ -2,6 +2,6 @@
   "name": "synctv-enhanced-subtitles",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test gateway.test.mjs timed-text.test.mjs list-sort.test.mjs chat-history.test.mjs video-info.test.mjs" },
+  "scripts": { "test": "node --test gateway.test.mjs timed-text.test.mjs list-sort.test.mjs chat-history.test.mjs video-info.test.mjs audio.test.mjs" },
   "engines": { "node": ">=24" }
 }

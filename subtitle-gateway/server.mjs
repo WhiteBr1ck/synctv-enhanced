@@ -32,11 +32,24 @@ export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http:
       if (pathname === '/_synctv/health') return json(res, 200, { status: 'ok', embeddedSubtitles: true });
       if (pathname.startsWith('/_synctv/subtitles/')) {
         if (!['GET', 'HEAD'].includes(req.method)) return json(res, 405, { error: 'Method not allowed' });
-        const match = /^\/_synctv\/subtitles\/([a-f0-9]{64})\/(tracks|info|track-(\d+)\.(ass|srt|vtt)|font-(\d+))$/.exec(pathname);
+        const match = /^\/_synctv\/subtitles\/([a-f0-9]{64})\/(tracks|info|track-(\d+)\.(ass|srt|vtt)|font-(\d+)|audio-(\d+)\.mp4)$/.exec(pathname);
         const source = match && store.get(match[1]);
         if (!source) return json(res, 404, { error: '字幕会话已过期，请重新打开视频' });
-        if (match[2] === 'tracks') return json(res, 200, { tracks: await store.tracks(source) });
+        if (match[2] === 'tracks') {
+          const tracks = await store.tracks(source);
+          return json(res, 200, { tracks, audioTracks: source.audioTracks, duration: source.duration });
+        }
         if (match[2] === 'info') { await store.tracks(source); return json(res, 200, source.info); }
+        if (match[6] !== undefined) {
+          const query = new URL(req.url, 'http://gateway').searchParams;
+          const start = Number(query.get('start') || 0), rate = Number(query.get('rate') || 1);
+          if (!Number.isFinite(start) || start < 0 || start > 86400 || !Number.isFinite(rate) || rate < 0.5 || rate > 5) return json(res, 400, { error: 'Invalid audio position' });
+          await store.tracks(source);
+          if (!source.audioTracks.some(track => track.index === Number(match[6]))) return json(res, 404, { error: 'Audio track not found' });
+          if (source.duration && start >= source.duration) return json(res, 416, { error: 'Audio position out of range' });
+          if (req.method === 'HEAD') { res.writeHead(200, { 'Content-Type': 'audio/mp4', 'Cache-Control': 'no-store' }); return res.end(); }
+          return store.streamAudio(source, Number(match[6]), start, rate, req, res);
+        }
         const isFont = match[5] !== undefined;
         const file = isFont ? await store.font(source, Number(match[5])) : await store.file(source, Number(match[3]), match[4]);
         const info = await stat(file);
@@ -177,6 +190,7 @@ export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http:
   store.prune().catch(() => console.error('Subtitle cache initialization failed'));
   return { listener, store, close: async () => {
     clearInterval(prune);
+    for (const child of store.audioStreams) child.kill('SIGKILL');
     for (const socket of sockets) socket.destroy();
     if (listener.listening) await new Promise(resolve => listener.close(resolve));
   } };

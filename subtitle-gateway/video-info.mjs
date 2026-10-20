@@ -1,5 +1,13 @@
 const number = value => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : undefined;
 
+export function audioInfo(probe) {
+  return (probe.streams || []).filter(stream => stream.codec_type === 'audio').map(stream => ({
+    index: stream.index, codec: stream.codec_name, channels: number(stream.channels),
+    channelLayout: stream.channel_layout, sampleRate: number(stream.sample_rate),
+    language: stream.tags?.language || '', title: stream.tags?.title || '', default: !!stream.disposition?.default
+  }));
+}
+
 export function videoInfo(probe) {
   const stream = probe.streams?.find(item => item.codec_type === 'video' && !item.disposition?.attached_pic);
   if (!stream) return null;

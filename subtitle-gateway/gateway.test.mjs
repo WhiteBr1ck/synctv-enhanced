@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
@@ -33,6 +34,12 @@ before(async () => {
     '-pix_fmt', 'yuv420p10le', '-tag:v', 'hvc1',
     '-x265-params', 'pools=none:frame-threads=1:log-level=error:colorprim=9:transfer=16:colormatrix=9:hdr10=1',
     path.join(temp, 'movie.hdr.mp4')]);
+  ffmpeg(['-f', 'lavfi', '-i', 'color=s=320x180:r=24:d=5',
+    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=5',
+    '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=5',
+    '-map', '0:v', '-map', '1:a', '-map', '2:a', '-c:v', 'libx264', '-preset', 'ultrafast',
+    '-c:a', 'eac3', '-ac', '6', '-metadata:s:a:0', 'language=jpn', '-metadata:s:a:1', 'language=eng',
+    '-disposition:a:0', 'default', '-disposition:a:1', '0', path.join(temp, 'movie.audio.mkv')]);
   await writeFile(path.join(temp, 'index.html'), '<html><body>Patched v0.9.15 UI</body></html>');
   upstream = http.createServer(async (req, res) => {
     if (req.url.startsWith('/media.')) {
@@ -138,6 +145,56 @@ test('identifies a real HEVC 10-bit PQ stream with no subtitle tracks', async ()
     assert.equal(value.video.colorPrimaries, 'bt2020');
     assert.deepEqual((await (await fetch(origin + discovery)).json()).tracks, []);
   } finally { extension = 'mkv'; }
+});
+
+test('streams the chosen E-AC-3 track as audible AAC without including or modifying video', async () => {
+  extension = 'audio.mkv';
+  try {
+    const original = await readFile(path.join(temp, 'movie.audio.mkv'));
+    const discovery = await source();
+    const {audioTracks} = await (await fetch(origin + discovery)).json();
+    assert.deepEqual(audioTracks.map(track => [track.codec,track.channels,track.language]), [['eac3',6,'jpn'],['eac3',6,'eng']]);
+    const frequencies=[];
+    for (const [i,track] of audioTracks.entries()) {
+      const response = await fetch(origin + track.url + '?start=2');
+      assert.equal(response.status,200);
+      assert.equal(response.headers.get('content-type'),'audio/mp4');
+      const file=path.join(temp,`compat-${i}.mp4`);
+      await writeFile(file,Buffer.from(await response.arrayBuffer()));
+      const probe=spawnSync('ffprobe',['-v','error','-show_streams','-of','json',file],{encoding:'utf8'});
+      const streams=JSON.parse(probe.stdout).streams;
+      assert.equal(streams.length,1);
+      assert.equal(streams[0].codec_name,'aac');assert.equal(streams[0].channels,2);
+      const decoded=spawnSync('ffmpeg',['-v','error','-i',file,'-f','s16le','-ac','1','-ar','48000','pipe:1'],{maxBuffer:2*1024*1024});
+      assert.equal(decoded.status,0);
+      const pcm=decoded.stdout;
+      assert.ok(pcm.length>2*48000*2.8 && pcm.length<2*48000*3.2,'seeking returns the remaining audio, not the full file');
+      let energy=0,crossings=0;
+      for(let j=4098;j<pcm.length-4096;j+=2){const value=pcm.readInt16LE(j);energy+=value*value;
+        if(value>0&&pcm.readInt16LE(j-2)<=0)crossings++;}
+      assert.ok(energy>1e7,'decoded output contains non-silent PCM');
+      frequencies.push(crossings);
+    }
+    assert.ok(frequencies[1]>frequencies[0]*1.8 && frequencies[1]<frequencies[0]*2.2,'each language selects its own audio stream');
+    assert.equal(createHash('sha256').update(await readFile(path.join(temp,'movie.audio.mkv'))).digest('hex'),createHash('sha256').update(original).digest('hex'));
+  } finally { extension='mkv'; }
+});
+
+test('rejects invalid audio positions and stops FFmpeg when the viewer disconnects', async () => {
+  extension='audio.mkv';
+  try {
+    const discovery=await source();const {audioTracks}=await (await fetch(origin+discovery)).json();
+    const url=origin+audioTracks[0].url;
+    assert.equal((await fetch(url+'?start=NaN')).status,400);
+    assert.equal((await fetch(url+'?start=-1')).status,400);
+    assert.equal((await fetch(url+'?start=900')).status,416);
+    assert.equal((await fetch(url.replace(/audio-\d+/, 'audio-99'))).status,404);
+    const controller=new AbortController();
+    const response=await fetch(url,{signal:controller.signal});
+    await response.body.getReader().read();controller.abort();
+    for(let i=0;i<40&&gateway.store.audioStreams.size;i++)await new Promise(resolve=>setTimeout(resolve,25));
+    assert.equal(gateway.store.audioStreams.size,0,'disconnect releases the compatibility audio process');
+  } finally {extension='mkv';}
 });
 test('reads ASS styles, SRT text and attached fonts without modifying the video', async () => {
   extension = 'mkv';

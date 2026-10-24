@@ -1,29 +1,60 @@
 import Artplayer from "artplayer";
 import type { BaseMovieInfo } from "@/types/Movie";
-import { basicDecodeType, describePlayback, describeVideo, type VideoInfo } from "@/utils/video-info";
+import type { VideoInfo } from "@/utils/video-info";
+import { playbackSummary } from "@/utils/playback-summary";
 import "./video-info.css";
 
-interface ProbeInfo { video?: VideoInfo | null; container?: string; sourceIndex?: number; }
-
+interface ProbeInfo {
+  video?: VideoInfo | null;
+  audioTracks?: any[];
+  container?: string;
+  sourceIndex?: number;
+}
 export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
   return (art: Artplayer) => {
-    let context = initialContext;
-    let info: ProbeInfo | undefined;
-    let state = context.mediaInfoSource ? "打开统计信息时读取" : "该来源暂不提供探测信息";
-    let request: AbortController | undefined;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    let disposed = false;
-    let lastBuffer = "尚无缓冲等待记录";
-    let waits = 0;
-    const buffering = () => { lastBuffer = `${new Date().toLocaleTimeString()} · 等待数据（累计 ${++waits} 次）`; };
-    art.on("video:waiting", buffering);
-    art.on("video:stalled", buffering);
-    const panel = art.template.$infoPanel;
-    art.template.$info.classList.add("synctv-video-info");
+    let context = initialContext,
+      info: ProbeInfo | undefined,
+      request: AbortController | undefined,
+      timer: ReturnType<typeof setInterval> | undefined,
+      disposed = false;
+    let waits = 0,
+      waitStart = 0,
+      waitTotal = 0,
+      lastWait = "";
+    const waiting = () => {
+      if (!waitStart) {
+        waitStart = performance.now();
+        waits++;
+        lastWait = new Date().toLocaleTimeString();
+      }
+    };
+    const playing = () => {
+      if (waitStart) {
+        waitTotal += performance.now() - waitStart;
+        waitStart = 0;
+      }
+    };
+    art.on("video:waiting", waiting);
+    art.on("video:stalled", waiting);
+    art.on("video:playing", playing);
+    art.on("video:pause", playing);
     const section = document.createElement("div");
     section.className = "synctv-video-info-extra";
+    art.template.$info.classList.add("synctv-video-info");
     const rows = new Map<string, HTMLElement>();
-    const add = (key: string, label: string, explanation?: string) => {
+    for (const [key, label] of Object.entries({
+      resolution: "视频分辨率",
+      window: "窗口分辨率",
+      fps: "帧率",
+      codec: "解码格式",
+      playback: "播放方式",
+      depth: "色深",
+      audio: "音频",
+      buffer: "缓冲",
+      waiting: "缓冲等待",
+      sync: "最近同步跳转",
+      range: "动态范围"
+    })) {
       const row = document.createElement("div");
       row.className = "art-info-item";
       const title = document.createElement("div");
@@ -32,93 +63,100 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       const content = document.createElement("div");
       content.className = "art-info-content";
       content.dataset.stat = key;
-      if (explanation) row.title = explanation;
       row.append(title, content);
       section.append(row);
       rows.set(key, content);
-    };
-    add("playback", "播放方式");
-    add("source", "探测片源");
-    add("video", "片源视频");
-    add("range", "片源动态范围");
-    add("color", "片源色彩");
-    add("audio", "声音播放");
-    add("buffer", "前方缓冲");
-    add("waiting", "最近缓冲等待");
-    add("sync", "最近同步跳转");
-    add("syncConfig", "本机同步设置");
-    add("switch", "最近换源");
-    add("display", "本机 HDR 能力", "浏览器报告的显示能力；不代表当前画面正在以 HDR 输出。");
-    add("decode", "本机编码支持", "代表性编码规格的基础检测；不保证当前影片的封装、级别和完整规格都兼容。");
-    const note = document.createElement("div");
-    note.className = "synctv-video-info-note";
-    note.textContent = "能力检测仅供参考，无法据此确认实际 HDR 输出。片源信息对应探测源，切换后的流可能不同。";
-    section.append(note);
-    panel.append(section);
-    const set = (key: string, text: string) => {
+    }
+    art.template.$infoPanel.append(section);
+    const set = (key: string, value: string) => {
       const row = rows.get(key)!;
-      if (row.textContent !== text) { row.textContent = text; row.title = text; }
+      if (row.textContent !== value) row.textContent = value;
     };
     const refresh = () => {
       if (disposed) return;
-      const selected = art.plugins?.source?.currentSource?.();
-      const source = selected || { playbackMode: context.playbackMode, html: "默认", type: context.type };
-      set("playback", describePlayback(source.playbackMode, context.vendorInfo?.vendor, source.html, source.type));
-      const probed = info?.sourceIndex === 0 ? "默认" : context.moreSources?.[(info?.sourceIndex ?? 0) - 1]?.name;
-      set("source", info ? `${probed || "未知源"}${source.html !== probed ? `（当前选择：${source.html}）` : ""}` : state);
-      set("video", describeVideo(info?.video));
-      set("range", info?.video?.dynamicRange || "未知");
-      set("color", [info?.video?.colorPrimaries, info?.video?.colorTransfer, info?.video?.colorSpace].filter(Boolean).join(" / ") || "未标注");
-      set("audio", art.plugins?.audioCompat?.status?.() || "浏览器原生音频");
       const video = art.video;
+      const selected = art.plugins?.source?.currentSource?.() || {
+        url: context.url,
+        html: "默认",
+        type: context.type,
+        playbackMode: context.playbackMode
+      };
+      const hls = art.hls;
+      const level = hls?.levels?.[hls.currentLevel >= 0 ? hls.currentLevel : 0];
+      const audioTrack = hls?.audioTracks?.[hls.audioTrack];
+      const summary = playbackSummary(
+        selected,
+        info?.video || undefined,
+        info?.audioTracks,
+        context.videoRange,
+        level?.videoCodec,
+        audioTrack?.attrs?.CODECS || level?.audioCodec,
+        art.plugins?.audioCompat?.info?.()
+      );
+      const rect = video.getBoundingClientRect();
+      set("resolution", video.videoWidth ? `${video.videoWidth} × ${video.videoHeight}` : "—");
+      set("window", `${Math.round(rect.width)} × ${Math.round(rect.height)}`);
+      const fps =
+        level?.frameRate || Number(level?.attrs?.["FRAME-RATE"]) || info?.video?.frameRate;
+      set("fps", fps ? `${Number(fps.toFixed(3))} fps` : "—");
+      set("codec", summary.codec);
+      set("playback", summary.transcoded ? "转码" : "直通");
+      set("depth", summary.depth ? `${summary.depth} bit` : "—");
+      set("audio", summary.audio);
+      set("range", summary.dynamicRange);
       let ahead = 0;
-      for (let i = 0; i < video.buffered.length; i++) {
-        if (video.buffered.start(i) <= video.currentTime && video.buffered.end(i) >= video.currentTime) ahead = video.buffered.end(i) - video.currentTime;
-      }
-      const quality = video.getVideoPlaybackQuality?.();
-      set("buffer", `${ahead.toFixed(1)} 秒 · readyState ${video.readyState}${quality ? ` · 丢帧 ${quality.droppedVideoFrames}/${quality.totalVideoFrames}` : ""}${video.error ? ` · 播放错误 ${video.error.code}` : ""}`);
-      set("waiting", lastBuffer);
-      set("sync", art.plugins?.syncPlugin?.lastCorrection?.() || "无房间同步记录");
-      set("syncConfig", art.plugins?.syncPlugin?.automaticSettings?.() || "无房间同步设置");
-      set("switch", art.plugins?.source?.lastChange?.() || "初始播放");
-      let hdr: boolean | undefined;
-      try { hdr = window.matchMedia("(dynamic-range: high)").matches; } catch { /* unavailable */ }
-      set("display", hdr ? "浏览器报告支持 HDR" : "未报告 HDR 能力（未开启或检测不受支持）");
-      const type = basicDecodeType(info?.video || undefined);
-      const support = type ? art.video.canPlayType(type) : "";
-      set("decode", type ? `${info!.video!.codec!.toUpperCase()} 基础规格：${support === "probably" ? "报告支持" : support === "maybe" ? "可能支持" : "未报告支持"}` : "暂无对应编码信息");
+      for (let i = 0; i < video.buffered.length; i++)
+        if (
+          video.buffered.start(i) <= video.currentTime &&
+          video.buffered.end(i) >= video.currentTime
+        )
+          ahead = video.buffered.end(i) - video.currentTime;
+      set("buffer", `${ahead.toFixed(1)} 秒`);
+      const duration = (waitTotal + (waitStart ? performance.now() - waitStart : 0)) / 1000;
+      set("waiting", `${waits} 次 · ${duration.toFixed(1)} 秒${lastWait ? ` · ${lastWait}` : ""}`);
+      const correction = art.plugins?.syncPlugin?.lastCorrection?.();
+      set("sync", correction === "尚未发生同步跳转" || !correction ? "—" : correction);
     };
     const load = async () => {
       if (!context.mediaInfoSource || info || request || disposed) return;
-      const controller = request = new AbortController();
-      state = "正在读取片源信息…";
-      refresh();
+      const controller = (request = new AbortController());
       try {
         const response = await fetch(context.mediaInfoSource, { signal: controller.signal });
-        if (!response.ok) throw new Error("probe failed");
-        const value: ProbeInfo = await response.json();
-        if (disposed || controller.signal.aborted) return;
-        info = value;
+        if (!response.ok) return;
+        const result = await response.json();
+        if (!disposed && !controller.signal.aborted) info = result;
       } catch {
-        if (!disposed && !controller.signal.aborted) state = "读取失败，关闭后重开可重试";
+        /* unavailable fields remain a dash */
       } finally {
         if (request === controller) request = undefined;
         if (!controller.signal.aborted) refresh();
       }
     };
-    const visible = (show: boolean) => {
+    art.on("info", (show: boolean) => {
       clearInterval(timer);
-      timer = undefined;
-      if (show) { refresh(); void load(); timer = setInterval(refresh, 1000); }
-    };
-    art.on("info", visible);
-    art.on("destroy", () => { disposed = true; request?.abort(); clearInterval(timer); section.remove(); });
+      if (show) {
+        refresh();
+        void load();
+        timer = setInterval(refresh, 500);
+      }
+    });
+    art.on("destroy", () => {
+      disposed = true;
+      request?.abort();
+      clearInterval(timer);
+      section.remove();
+    });
     refresh();
-    return { name: "videoInfo", updateContext: (next: BaseMovieInfo) => {
-      request?.abort(); request = undefined; context = next; info = undefined;
-      state = context.mediaInfoSource ? "打开统计信息时读取" : "该来源暂不提供探测信息";
-      refresh();
-      if (art.info.show) void load();
-    } };
+    return {
+      name: "videoInfo",
+      updateContext: (next: BaseMovieInfo) => {
+        request?.abort();
+        request = undefined;
+        context = next;
+        info = undefined;
+        refresh();
+        if (art.info.show) void load();
+      }
+    };
   };
 }

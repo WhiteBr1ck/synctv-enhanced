@@ -64,6 +64,7 @@ func (s *EmbyVendorService) ListDynamicMovie(
 		return nil, fmt.Errorf("load emby server id error: %w", err)
 	}
 
+	configuredRoot := truePath
 	if subPath != "" {
 		truePath = subPath
 	}
@@ -90,6 +91,18 @@ func (s *EmbyVendorService) ListDynamicMovie(
 	}
 
 	resp.Total = int64(data.GetTotal())
+	paths := data.GetPaths()
+	for i, p := range paths {
+		if configuredRoot != "" && p.GetPath() == configuredRoot {
+			paths = paths[i+1:]
+			break
+		}
+	}
+	for _, p := range paths {
+		if p.GetPath() != "" {
+			resp.Paths = append(resp.Paths, &model.MoviePath{Name: p.GetName(), ID: s.movie.ID, SubPath: p.GetPath()})
+		}
+	}
 
 	resp.Movies = make([]*model.Movie, len(data.GetItems()))
 	for i, flr := range data.GetItems() {
@@ -286,6 +299,10 @@ func (s *EmbyVendorService) GenMovieInfo(
 	if len(data.Sources) == 0 {
 		return nil, errors.New("no source")
 	}
+	if data.Name != "" {
+		movie.Name = data.Name
+	}
+	movie.VideoRange = data.VideoRange
 
 	movie.URL = viewerSourceURL(data.Sources[0].URL, data.Sources[0].IsCompatibility)
 	movie.Type = utils.GetURLExtension(movie.URL)
@@ -295,10 +312,7 @@ func (s *EmbyVendorService) GenMovieInfo(
 			movie.Subtitles = make(map[string]*dbModel.Subtitle, len(data.Sources[0].Subtitles))
 		}
 
-		movie.Subtitles[s.Name] = &dbModel.Subtitle{
-			URL:  s.URL,
-			Type: s.Type,
-		}
+		movie.Subtitles[s.Name] = s.Subtitle()
 	}
 
 	for _, s := range data.Sources[1:] {
@@ -316,10 +330,7 @@ func (s *EmbyVendorService) GenMovieInfo(
 				movie.Subtitles = make(map[string]*dbModel.Subtitle, len(s.Subtitles))
 			}
 
-			movie.Subtitles[subt.Name] = &dbModel.Subtitle{
-				URL:  subt.URL,
-				Type: subt.Type,
-			}
+			movie.Subtitles[subt.Name] = subt.Subtitle()
 		}
 	}
 
@@ -344,6 +355,10 @@ func (s *EmbyVendorService) GenProxyMovieInfo(
 	if err != nil {
 		return nil, err
 	}
+	if data.Name != "" {
+		movie.Name = data.Name
+	}
+	movie.VideoRange = data.VideoRange
 
 	for si, es := range data.Sources {
 		if len(es.URL) == 0 {
@@ -404,10 +419,8 @@ func (s *EmbyVendorService) GenProxyMovieInfo(
 				Path:     rawPath,
 				RawQuery: rawQuery.Encode(),
 			}
-			movie.Subtitles[s.Name] = &dbModel.Subtitle{
-				URL:  u.String(),
-				Type: s.Type,
-			}
+			movie.Subtitles[s.Name] = s.Subtitle()
+			movie.Subtitles[s.Name].URL = u.String()
 		}
 	}
 

@@ -59,6 +59,7 @@ func mediaStreamInfo2pb(msi []emby.MediaStreams) []*pb.MediaStreamInfo {
 			VideoRange:      msi.VideoRange,
 			ColorTransfer:   msi.ColorTransfer,
 			VideoRangeType:  msi.VideoRangeType,
+			IsExternal:      msi.IsExternal,
 		}
 	}
 	return pbmsi
@@ -279,6 +280,23 @@ func (a *EmbyService) FsList(ctx context.Context, req *pb.FsListReq) (*pb.FsList
 		return nil, err
 	}
 	items := make([]*pb.Item, len(resp.Items))
+	if req.GetPath() != "" {
+		lineage := []*pb.Path{}
+		seen := map[string]bool{}
+		id := req.GetPath()
+		for id != "" && !seen[id] && len(lineage) < 16 {
+			seen[id] = true
+			parent, e := cli.UserItemsByID(id)
+			if e != nil {
+				break
+			}
+			if parent.Type != "UserRootFolder" && parent.Type != "AggregateFolder" {
+				lineage = append([]*pb.Path{{Name: parent.Name, Path: parent.ID}}, lineage...)
+			}
+			id = parent.ParentID
+		}
+		paths = append([]*pb.Path{{Name: "Home", Path: ""}}, lineage...)
+	}
 	for i, item := range resp.Items {
 		items[i] = item2pb(item)
 	}

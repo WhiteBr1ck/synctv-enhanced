@@ -27,6 +27,7 @@ const switchSource = (art: Artplayer, source: artplayPluginSource) => {
 
 export function artplayPluginSource(sources: artplayPluginSource[]) {
   return (art: Artplayer) => {
+    let sourceList=sources;
     let currentSourceName = sources.length > 0 ? sources[0].html : "";
     let currentSource = sources[0];
     let cancelRestore: (() => unknown) | undefined;
@@ -40,41 +41,11 @@ export function artplayPluginSource(sources: artplayPluginSource[]) {
         lastChange = `${new Date().toLocaleTimeString()} · ${source.html}`;
         cancelRestore = switchSource(art, source);
       }
+      art.emit('synctv:sources' as any);
       return "源";
     };
     const setSelector = (newSources: artplayPluginSource[]) => {
-      if (newSources.length <= 1) {
-        if (art.controls["source"]) art.controls.remove("source");
-        if (art.setting.find("source")) art.setting.remove("source");
-      } else {
-        const isMobile = Artplayer.utils.isMobile;
-        const updateControls = () => {
-          if (!isMobile || art.fullscreen) {
-            art.controls.update({
-              name: "source",
-              position: "right",
-              html: "源",
-              selector: newSources,
-              onSelect
-            });
-          } else if (art.controls["source"]) {
-            art.controls.remove("source");
-          }
-        };
-
-        updateControls();
-        art.setting.update({
-          name: "source",
-          position: "right",
-          html: "源",
-          selector: newSources,
-          onSelect
-        });
-
-        if (isMobile) {
-          art.on("fullscreen", updateControls);
-        }
-      }
+      sourceList=newSources;
     };
     const updateSources = (newSources: artplayPluginSource[]) => {
       setSelector(newSources);
@@ -89,6 +60,8 @@ export function artplayPluginSource(sources: artplayPluginSource[]) {
       name: "source",
       updateSources,
       currentSource: () => currentSource,
+      entries:()=>sourceList,
+      selectSource:(index:number)=>{if(sourceList[index])onSelect(sourceList[index]);},
       lastChange: () => lastChange
     };
   };

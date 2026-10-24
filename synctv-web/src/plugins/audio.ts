@@ -2,6 +2,8 @@ import Artplayer from "artplayer";
 import type { BaseMovieInfo } from "@/types/Movie";
 import { audioCorrection, audioLabel, audioMime, type EmbeddedAudioTrack } from "@/utils/audio";
 import "./audio.css";
+import {controlIcon,icon} from './icons';
+import {trackLabel,escapeLabel} from '@/utils/track-label';
 
 export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
   return (art: Artplayer) => {
@@ -111,17 +113,17 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
         remove("audio-embedded"); return;
       }
       const selector = [
-        { html: "原声自动（浏览器解码）", index: -1, default: !selected },
+        { html: "原声自动", index: -1, default: !selected },
         ...tracks.map(track => {
           const label = document.createElement("span");
-          label.textContent = `${audioLabel(track)} · AAC兼容 [${track.index}]`;
+          label.textContent = `${trackLabel({...track,origin:'embedded'},`音轨 ${track.index}`)} · AAC 兼容`;
           return { html: label.innerHTML, index: track.index, default: selected?.index === track.index };
         })
       ];
-      const onSelect = (item: any) => { select(tracks.find(track => track.index === item.index)); return "音轨"; };
-      if (!Artplayer.utils.isMobile || art.fullscreen) art.controls.update({ name: "audio-embedded", position: "right", html: "音轨", selector, onSelect });
+      const onSelect = (item: any) => { select(tracks.find(track => track.index === item.index)); return controlIcon('audio','音轨'); };
+      if (!Artplayer.utils.isMobile || art.fullscreen) art.controls.update({ name: "audio-embedded", position: "right", html: controlIcon('audio','音轨'), selector, onSelect });
       else if (art.controls["audio-embedded"]) art.controls.remove("audio-embedded");
-      art.setting.update({ name: "audio-embedded", html: "音轨", selector, onSelect, width: 320 });
+      art.setting.update({ name: "audio-embedded", html: "音轨",icon:icon('audio'), selector, onSelect:(item:any)=>{onSelect(item);return item.index<0?'原声自动':'AAC 兼容';}, width: 420 });
     };
     const discover = async () => {
       discovery?.abort();
@@ -159,6 +161,7 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
     });
     void discover();
     return { name: "audioCompat", status: () => selected ? `${audioLabel(selected)} → AAC 立体声` : "原声（浏览器解码）",
+      info:()=>({transcoded:!!selected,codec:selected?'AAC':(tracks.find(t=>t.default)||tracks[0])?.codec?.toUpperCase(),channels:selected?2:(tracks.find(t=>t.default)||tracks[0])?.channels}),
       updateContext: (next: BaseMovieInfo) => { restore(); selected = undefined; tracks = []; context = next; void discover(); } };
   };
 }

@@ -14,6 +14,8 @@ test('ASS size adjustment preserves typography, positions, vectors and karaoke',
 
 test('SSA column order and invalid stored preferences are handled', () => {
   assert.equal(scaleAss('[V4 Styles]\nFormat: Fontsize, Name\nStyle: 20,Default', 2), '[V4 Styles]\nFormat: Fontsize, Name\nStyle:40,Default');
-  assert.deepEqual(normalizeAppearance({scale:100,lift:-10}), {scale:1,lift:0});
-  assert.deepEqual(normalizeAppearance({scale:1.5,lift:10}), {scale:1.5,lift:10});
+  assert.deepEqual(normalizeAppearance({scale:100,lift:-10}), {scale:1,lift:0,color:'#ffffff'});
+  assert.deepEqual(normalizeAppearance({scale:1.5,lift:10}), {scale:1.5,lift:10,color:'#ffffff'});
+  assert.equal(normalizeAppearance({color:'red;display:none'}).color,'#ffffff');
+  assert.equal(normalizeAppearance({color:'#00ff00'}).color,'#00ff00');
 });

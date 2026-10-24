@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useLocalStorage } from "@vueuse/core";
 import { useRouteParams } from "@vueuse/router";
 import { roomStore } from "@/stores/room";
+import {storeToRefs} from 'pinia';
 import type { EditMovieInfo, MovieInfo } from "@/types/Movie";
 import { useMovieApi } from "@/hooks/useMovie";
 import { useRoomApi, useRoomPermission } from "@/hooks/useRoom";
@@ -59,7 +60,7 @@ const {
 } = useMovieApi(Props.token, Props.roomId);
 
 // 搜索关键词
-const searchKeyword = ref("");
+const {browserKeyword:searchKeyword}=storeToRefs(room);
 
 // 打开编辑对话框
 const editDialog = ref(false);
@@ -119,7 +120,7 @@ const fileMetadataSortAvailable = computed(() => dynamic.value && room.movies.so
 
     <div class="card-body">
       <el-breadcrumb :separator-icon="ArrowRight">
-        <el-breadcrumb-item v-for="item in room.folder" :key="item.id">
+        <el-breadcrumb-item v-for="item in room.folder" :key="item.id + ':' + (item.subPath || '')">
           <el-button link @click="handleSwitchDir(item.id, item.subPath)">
             {{ item.name }}
           </el-button>
@@ -127,18 +128,18 @@ const fileMetadataSortAvailable = computed(() => dynamic.value && room.movies.so
       </el-breadcrumb>
 
       <!-- 搜索框 -->
-      <div class="my-4 flex">
+      <div class="list-toolbar my-4 flex gap-2">
         <input
           type="text"
           v-model="searchKeyword"
-          class="l-input m-0 p-2 flex-1 mr-2"
+          class="l-input m-0 p-2 flex-1 min-w-0"
           placeholder="搜索"
           @keyup.enter="handleSearch"
         />
         <button class="btn" @click="handleSearch">搜索</button>
+        <SortSelector label="影片排序" v-model="movieSort" @change="changeSort" :metadata="fileMetadataSortAvailable" :added="!dynamic" :modified-disabled="!!searchKeyword" :disabled="moviesLoading" />
       </div>
 
-      <SortSelector label="影片排序" v-model="movieSort" @change="changeSort" :metadata="fileMetadataSortAvailable" :added="!dynamic" :modified-disabled="!!searchKeyword" :disabled="moviesLoading" />
 
       <el-skeleton v-if="moviesLoading" :rows="1" animated />
       <div
@@ -240,7 +241,7 @@ const fileMetadataSortAvailable = computed(() => dynamic.value && room.movies.so
             <el-icon width="18px">
               <FolderOpened />
             </el-icon>
-            <FolderOpenedIcon class="inline-block" width="18px" />
+            <FolderOpened class="inline-block" width="18px" />
           </button>
 
           <button

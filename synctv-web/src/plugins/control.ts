@@ -1,15 +1,9 @@
 import Artplayer from "artplayer";
 import type Hls from "hls.js";
 import type { MediaPlayerClass } from "dashjs";
-
-// SVG icons
-const qualityIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" height="18">
-    <path fill="#fff" d="M0 96C0 60.7 28.7 32 64 32l384 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6l96 0 32 0 208 0c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z"/>
-</svg>`;
-
-const audioIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" height="18">
-    <path fill="#fff" d="M256 80C149.9 80 62.4 159.4 49.6 262c9.4-3.8 19.6-6 30.4-6c26.5 0 48 21.5 48 48l0 128c0 26.5-21.5 48-48 48c-44.2 0-80-35.8-80-80l0-16 0-48 0-48C0 146.6 114.6 32 256 32s256 114.6 256 256l0 48 0 48 0 16c0 44.2-35.8 80-80 80c-26.5 0-48-21.5-48-48l0-128c0-26.5 21.5-48 48-48c10.8 0 21 2.1 30.4 6C449.6 159.4 362.1 80 256 80z"/>
-</svg>`;
+import {controlIcon,icon} from './icons';
+import {trackLabel,escapeLabel} from '@/utils/track-label';
+import {codecName} from '@/utils/playback-summary';
 
 function uniqBy(array: any[], property: string) {
   const seen = new Map();
@@ -31,6 +25,9 @@ interface QualityLevel {
 
 interface AudioTrack {
   name?: string;
+  lang?: string;
+  codec?:string;
+  attrs?:any;
 }
 
 interface MediaProvider {
@@ -149,9 +146,9 @@ export default function artplayerPluginMediaControl() {
       return null;
     }
 
-    function updateQualityControl(provider: MediaProvider) {
-      const qualities = provider.getQualities();
-      if (!qualities.length) return;
+    function updateQualityControl(provider: MediaProvider | null) {
+      const qualities = provider?.getQualities() || [];
+      const sources=art.plugins?.source?.entries?.() || [];
 
       const auto = "自动";
       const title = "画质";
@@ -161,11 +158,11 @@ export default function artplayerPluginMediaControl() {
         return level.height ? `${level.height}P` : auto;
       };
 
-      const currentQuality = provider.getCurrentQuality();
-      const isAuto = provider.isAutoQuality?.() ?? currentQuality === -1;
+      const currentQuality = provider?.getCurrentQuality();
+      const isAuto = provider?.isAutoQuality?.() ?? currentQuality === -1;
 
-      const selector = uniqBy(
-        qualities.map((item, index) => ({
+      const selector:any[] = uniqBy(
+        (qualities.length>1?qualities:[]).map((item, index) => ({
           html: getName(item),
           value: index,
           default: currentQuality === index && !isAuto
@@ -173,19 +170,26 @@ export default function artplayerPluginMediaControl() {
         "html"
       ).sort((a, b) => b.value - a.value);
 
-      if (provider.setAutoQuality) {
+      if (qualities.length>1&&provider?.setAutoQuality) {
         selector.push({
           html: auto,
           value: -1,
           default: isAuto
         });
       }
+      const currentSource=art.plugins?.source?.currentSource?.();
+      const sourceOptions=sources.length>1?sources.map((source:any,index:number)=>{
+        const label=/H\.264/i.test(source.html)?'H.264 兼容':/原画|^raw$/i.test(source.html)?'原画':source.html==='默认'?(source.playbackMode==='transcode'?'自动处理':'默认'):`线路 ${index+1}`;
+        return {html:label,sourceIndex:index,default:source.url===currentSource?.url};
+      }):[];
+      selector.unshift(...sourceOptions);
 
-      updateControl("quality", title, selector, qualityIcon, (item: any) => {
-        provider.setQuality(item.value);
+      updateControl("quality", title, selector, icon('quality'), (item: any) => {
+        if(item.sourceIndex!==undefined){art.plugins.source.selectSource(item.sourceIndex);return controlIcon('quality',title);}
+        provider?.setQuality(item.value);
         art.loading.show = true;
         art.notice.show = `${title}: ${item.html}`;
-        return title;
+        return controlIcon('quality',title);
       });
     }
 
@@ -201,20 +205,19 @@ export default function artplayerPluginMediaControl() {
 
       const currentTrack = provider.getCurrentAudioTrack();
 
-      const selector = uniqBy(
+      const selector = (
         tracks.map((item, index) => ({
-          html: getName(item),
+          html: escapeLabel(trackLabel({origin:'embedded',language:item.lang||item.attrs?.LANGUAGE,codec:codecName(item.codec||item.attrs?.CODECS||art.hls?.levels?.[0]?.audioCodec),title:getName(item)},`音轨 ${index+1}`)),
           value: index,
           default: currentTrack === index
-        })),
-        "html"
+        }))
       );
 
-      updateControl("audio", title, selector, audioIcon, (item: any) => {
+      updateControl("audio", title, selector, icon('audio'), (item: any) => {
         provider.setAudioTrack(item.value);
         art.loading.show = true;
         art.notice.show = `${title}: ${item.html}`;
-        return title;
+        return controlIcon('audio',title);
       });
     }
 
@@ -225,7 +228,7 @@ export default function artplayerPluginMediaControl() {
       icon: string,
       onSelect: (item: any) => string
     ) {
-      if (selector.length <= 1) {
+      if (!selector.length) {
         if (art.controls[name]) art.controls.remove(name);
         if (art.setting.find(name)) art.setting.remove(name);
         return;
@@ -236,7 +239,7 @@ export default function artplayerPluginMediaControl() {
           art.controls.update({
             name,
             position: "right",
-            html: title,
+            html: controlIcon(name==='quality'?'quality':'audio',title),
             style: { padding: "0 10px" },
             selector,
             onSelect
@@ -252,22 +255,22 @@ export default function artplayerPluginMediaControl() {
         name,
         html: title,
         icon,
-        width: 200,
+        width: 340,
         selector,
-        onSelect
+        onSelect:(item:any)=>{onSelect(item);return item.html;}
       });
     }
 
     function update() {
       const provider = getProvider();
-      if (!provider) return;
 
       updateQualityControl(provider);
-      updateAudioControl(provider);
+      if(provider)updateAudioControl(provider);
     }
 
     art.on("ready", update);
     art.on("restart", update);
+    art.on('synctv:sources' as any,update);
 
     if (isMobile) {
       art.on("fullscreen", update);

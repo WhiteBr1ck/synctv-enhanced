@@ -23,15 +23,13 @@ const changeField = (event: Event) => {
   const value = (event.target as HTMLSelectElement).value;
   update(value === 'original' ? value : `${value}-${direction.value}`);
 };
-const changeDirection = (event: Event) => {
-  update(`${field.value}-${(event.target as HTMLSelectElement).value}`);
-};
+const changeDirection = () => update(`${field.value}-${direction.value === 'asc' ? 'desc' : 'asc'}`);
 </script>
 
 <template>
-  <div class="my-3 flex items-center gap-2">
-    <span>排序</span>
-    <select :aria-label="label" :value="field" @change="changeField" :disabled="disabled" class="l-input m-0 p-2 flex-1 min-w-0">
+  <div class="sort-selector">
+    <button type="button" class="sort-direction" :title="direction === 'asc' ? '升序，点击切换降序' : '降序，点击切换升序'" :aria-label="`${label}方向`" @click="changeDirection" :disabled="disabled || field === 'original'">{{direction === 'asc' ? '↑' : '↓'}}</button>
+    <select :aria-label="label" :value="field" @change="changeField" :disabled="disabled" class="l-input m-0 p-2 min-w-0">
       <option value="original">默认顺序</option>
       <option value="name">名称</option>
       <option value="modified" v-if="metadata" :disabled="modifiedDisabled">修改时间</option>
@@ -39,10 +37,8 @@ const changeDirection = (event: Event) => {
       <option value="size" v-if="metadata">大小</option>
       <option value="created" v-if="added">添加时间</option>
     </select>
-    <select :aria-label="`${label}方向`" :value="field === 'original' ? 'original' : direction" @change="changeDirection" :disabled="disabled || field === 'original'" class="l-input m-0 p-2 w-24">
-      <option value="original" v-if="field === 'original'">默认</option>
-      <option value="asc">升序 ↑</option>
-      <option value="desc">降序 ↓</option>
-    </select>
   </div>
 </template>
+<style scoped>
+.sort-selector{display:flex;align-items:stretch;flex-shrink:0;gap:4px}.sort-selector select{width:116px;max-width:32vw}.sort-direction{border:1px solid #9ca3af;border-radius:6px;min-width:32px;font-size:22px;line-height:1;background:transparent}.sort-direction:disabled{opacity:.35;cursor:default}
+</style>

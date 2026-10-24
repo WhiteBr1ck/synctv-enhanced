@@ -67,6 +67,41 @@ func TestEpisodeDisplayNames(t *testing.T) {
 	}
 }
 
+func TestFsListKeepsCompleteBreadcrumbs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/emby/Users/user/Items/season":
+			fmt.Fprint(w, `{"Id":"season","Name":"Season 1","Type":"Season","ParentId":"series","SeriesId":"series"}`)
+		case "/emby/Users/user/Items/series":
+			fmt.Fprint(w, `{"Id":"series","Name":"Series","Type":"Series","ParentId":"library"}`)
+		case "/emby/Users/user/Items/library":
+			fmt.Fprint(w, `{"Id":"library","Name":"TV","Type":"CollectionFolder","ParentId":"root"}`)
+		case "/emby/Users/user/Items/root":
+			fmt.Fprint(w, `{"Id":"root","Name":"root","Type":"AggregateFolder"}`)
+		case "/emby/Shows/series/Seasons":
+			fmt.Fprint(w, `{"Items":[],"TotalRecordCount":2}`)
+		case "/emby/Shows/series/Episodes":
+			fmt.Fprint(w, `{"Items":[{"Id":"episode","Name":"Title","Type":"Episode","IndexNumber":1,"ParentIndexNumber":1}],"TotalRecordCount":1}`)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	result, err := NewEmbyService(nil).FsList(context.Background(), &pb.FsListReq{Host: server.URL, UserId: "user", Token: "test", Path: "season", Limit: 10000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, p := range result.GetPaths() {
+		names = append(names, p.GetName())
+	}
+	if strings.Join(names, "/") != "Home/TV/Series/Season 1" {
+		t.Fatalf("breadcrumbs lost: %v", names)
+	}
+}
+
 func TestPlaybackItemLookupKeepsMediaSources(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Query().Get("Fields"), "MediaSources") {

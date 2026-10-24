@@ -118,6 +118,7 @@ message MediaStreamInfo {
   string videoRange = 10;
   string colorTransfer = 11;
   string videoRangeType = 12;
+  bool isExternal = 13;
 }
 
 message MediaSourceInfo {

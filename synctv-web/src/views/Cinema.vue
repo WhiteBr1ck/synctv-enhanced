@@ -37,6 +37,7 @@ import { artplayerSubtitleStyle } from "@/plugins/subtitle-style";
 import { artplayerEmbeddedAudio } from "@/plugins/audio";
 import { sendDanmu, artplayerStreamDanmu } from "@/plugins/danmu";
 import { indexStore } from "@/stores";
+import { useChatScroll } from "@/hooks/useChatScroll";
 
 const { settings } = indexStore();
 
@@ -101,7 +102,7 @@ const restoreChatHistory = async () => {
     await execute({ headers: { Authorization: token.value, "X-Room-Id": roomID.value }, signal: historyRequest.signal });
     if (generation !== historyGeneration || !state.value) return;
     chatMsgList.value = mergeChatHistory(state.value, chatMsgList.value);
-    nextTick(() => { if (chatArea.value) chatArea.value.scrollTop = chatArea.value.scrollHeight; });
+    chatScroll.changed();
   } catch (err: any) {
     if (err.code !== 'ERR_CANCELED') ElMessage.warning('聊天记录加载失败，重新连接后会再试');
   }
@@ -150,10 +151,7 @@ const sendMsg = (msg: string, incoming?: Message) => {
     chatMsgList.value.splice(0, chatMsgList.value.length - CHAT_HISTORY_LIMIT);
   }
 
-  // 确保聊天区域滚动到底部
-  nextTick(() => {
-    if (chatArea.value) chatArea.value.scrollTop = chatArea.value.scrollHeight;
-  });
+  chatScroll.changed(true);
 };
 
 const playerOption = computed<options>(() => {
@@ -163,6 +161,7 @@ const playerOption = computed<options>(() => {
     };
   }
   let option: options = {
+    title: room.currentMovie.base!.name,
     url: room.currentMovie.base!.url,
     type: room.currentMovie.base!.type,
     isLive: room.currentMovie.base!.live,
@@ -177,7 +176,8 @@ const playerOption = computed<options>(() => {
           if (danmu.direct) {
             return true;
           }
-          sendChatText(danmu.text);
+          const input = player?.template.$container.querySelector<HTMLInputElement>('.apd-input');
+          sendChatText(danmu.text, () => { if(input && input.value.trim() === danmu.text.trim()) input.value = ''; });
           return false;
         }
       }),
@@ -652,7 +652,9 @@ const noPlayArea = ref();
 const playArea = ref();
 
 // 消息区域
-const chatArea = ref();
+const chatArea = ref<HTMLElement>();
+const chatContent = ref<HTMLElement>();
+const chatScroll = useChatScroll(chatArea,chatContent);
 
 // 设置聊天框高度
 const resetChatAreaHeight = () => {
@@ -768,7 +770,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="card-body max-sm:p-0 pb-4" ref="playArea" v-if="playerOption.url">
           <div class="art-player">
-            <Player @get-instance="getPlayerInstance" :options="playerOption"></Player>
+            <Player :key="room.currentMovie.id + ':' + room.currentMovie.subPath" @get-instance="getPlayerInstance" :options="playerOption"></Player>
           </div>
         </div>
         <div class="card-body max-sm:pb-3 max-sm:px-3" ref="noPlayArea" v-else>
@@ -859,12 +861,15 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="card-body mb-2">
-          <div class="chatArea" ref="chatArea">
+          <div class="chatArea" ref="chatArea" tabindex="0" @scroll="chatScroll.onScroll" @wheel.passive="chatScroll.userScroll" @touchmove.passive="chatScroll.userScroll" @pointerdown="chatScroll.userScroll" @pointermove="($event.buttons && chatScroll.userScroll())" @keydown="chatScroll.userScroll">
+            <div ref="chatContent">
             <div class="message whitespace-pre-wrap break-words" v-for="item in chatMsgList" :key="item.id">
               <span>{{ chatText(item) }}</span>
               <small class="ml-1 text-gray-500">[{{ new Date(item.timestamp).toLocaleString() }}]</small>
             </div>
+            </div>
           </div>
+          <button v-if="!chatScroll.following.value && chatScroll.unread.value" class="chat-new-messages" @click="chatScroll.jump">{{chatScroll.unread.value}} 条新消息 ↓</button>
         </div>
         <div
           v-if="can(RoomMemberPermission.PermissionSendChatMessage)"

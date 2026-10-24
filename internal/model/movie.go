@@ -72,6 +72,7 @@ type MoreSource struct {
 
 type MovieBase struct {
 	PlaybackMode string               `gorm:"-" json:"playbackMode,omitempty"`
+	VideoRange   string               `gorm:"-" json:"videoRange,omitempty"`
 	FileSize     uint64               `gorm:"-" json:"fileSize,omitempty"`
 	ModifiedAt   uint64               `gorm:"-" json:"modifiedAt,omitempty"`
 	VendorInfo   VendorInfo           `gorm:"embedded;embeddedPrefix:vendor_info_" json:"vendorInfo,omitempty"`
@@ -112,14 +113,13 @@ func (m *MovieBase) Clone() *MovieBase {
 
 	sbs := make(map[string]*Subtitle, len(m.Subtitles))
 	for k, v := range m.Subtitles {
-		sbs[k] = &Subtitle{
-			URL:  v.URL,
-			Type: v.Type,
-		}
+		copy := *v
+		sbs[k] = &copy
 	}
 
 	return &MovieBase{
 		PlaybackMode: m.PlaybackMode,
+		VideoRange:   m.VideoRange,
 		URL:          m.URL,
 		MoreSources:  mss,
 		Name:         m.Name,
@@ -173,8 +173,13 @@ func (ns EmptyNullString) Value() (driver.Value, error) {
 }
 
 type Subtitle struct {
-	URL  string `json:"url"`
-	Type string `json:"type"`
+	URL      string `json:"url"`
+	Type     string `json:"type"`
+	Language string `json:"language,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Origin   string `json:"origin,omitempty"`
+	Index    uint64 `json:"index"`
+	Default  bool   `json:"default,omitempty"`
 }
 
 type VendorName = string

@@ -5,6 +5,7 @@ import { Message, MessageType, Status } from "@/proto/message";
 import Artplayer from "artplayer";
 import { ElNotification } from "element-plus";
 import { loadSyncPreferences, shouldCorrectTime, syncPreferencesKey, syncModes, syncTolerances, syncIntervals } from "@/utils/sync-preferences";
+import {icon,controlIcon} from './icons';
 
 const artPlay = async (art: Artplayer) => {
   let retry = false;
@@ -57,14 +58,14 @@ const newSyncControl = (art: Artplayer, publishStatus: (msg: Message) => boolean
 
   art.controls.add({
     name: "syncPlugin",
-    html: "同步",
+    html: controlIcon('sync','同步'),
     position: "right",
     click: syncControl
   });
 
   art.setting.add({
     name: "syncPlugin",
-    html: "同步状态",
+    html: "立即同步",icon:icon('sync'),
     selector: [
       {
         default: true,
@@ -76,11 +77,13 @@ const newSyncControl = (art: Artplayer, publishStatus: (msg: Message) => boolean
 };
 
 export const newSyncPlugin = (
-  publishStatus: (msg: Message) => boolean,
+  sendStatus: (msg: Message) => boolean,
   initStatus: Status,
   dynamicCurrentExpireId: () => number
 ) => {
   return (art: Artplayer): syncPlugin => {
+    let disposed=false;
+    const publishStatus=(message:Message)=>!disposed&&sendStatus(message);
     const playingStatusDebounce = debounces(debounceTime);
 
     let lastestSeek = 0;
@@ -127,7 +130,8 @@ export const newSyncPlugin = (
     const setAndNoPublishSeek = (seek: number, reason = "房间同步") => {
       lastestSeek = Date.now();
       if (art.option.isLive || Math.abs(art.currentTime - seek) < 2) return;
-      lastCorrection = `${new Date().toLocaleTimeString()} · ${reason}：${art.currentTime.toFixed(1)} → ${seek.toFixed(1)} 秒`;
+      const mode=reason==='房间定时校准'?`（${preferences.mode==='forward'?'仅向前':'双向'}）`:'';
+      lastCorrection = `${new Date().toLocaleTimeString()} · ${reason}${mode}：${art.currentTime.toFixed(1)} → ${seek.toFixed(1)} 秒`;
       console.groupCollapsed("设置seek(非广播)");
       console.log("seek:", seek);
       console.log("rate:", art.playbackRate);
@@ -297,7 +301,7 @@ export const newSyncPlugin = (
       const seek = shouldCorrectTime(art.currentTime, status.currentTime, preferences);
       const changed = seek || status.isPlaying !== !art.video.paused || status.playbackRate !== art.playbackRate;
       setAndNoPublishRate(status.playbackRate);
-      if (seek) setAndNoPublishSeek(status.currentTime, "房间定时校准");
+      if (seek && !(preferences.mode === 'forward' && status.currentTime < art.currentTime)) setAndNoPublishSeek(status.currentTime, "房间定时校准");
       if (status.isPlaying) void setAndNoPublishPlay(); else setAndNoPublishPause();
       return changed;
     };
@@ -306,6 +310,7 @@ export const newSyncPlugin = (
     const intervals: number[] = [];
     const watchers: WatchStopHandle[] = [];
     art.on("destroy", () => {
+      disposed=true;
       clearInterval(statusInterval);
       intervals.forEach((interval) => {
         clearInterval(interval);
@@ -327,20 +332,21 @@ export const newSyncPlugin = (
         if (initStatus.isPlaying) {
           await artPlay(art);
         }
+        if(disposed)return;
 
         ready = true;
         configureChecks();
         intervals.push(setInterval(checkExpire, 10000));
 
         newSyncControl(art, publishStatus);
-        art.setting.add({ name: "sync-preferences", html: "同步设置", width: 300, selector: [
-          { html: "定时校准方式", tooltip: syncModes.find(mode => mode.value === preferences.mode)!.html,
+        art.setting.add({ name: "sync-preferences", html: "同步设置",icon:icon('clock'), width: 300, selector: [
+          { html: "定时校准方式",icon:icon('sync'), tooltip: syncModes.find(mode => mode.value === preferences.mode)!.html,
             selector: syncModes.map(mode => ({ ...mode, default: mode.value === preferences.mode })),
             onSelect(item: any) { preferences.mode = item.value; savePreferences(); return item.html; } },
-          { html: "进度容差", tooltip: `${preferences.tolerance} 秒`,
+          { html: "进度容差",icon:icon('tolerance'), tooltip: `${preferences.tolerance} 秒`,
             selector: syncTolerances.map(value => ({ html: `${value} 秒`, value, default: value === preferences.tolerance })),
             onSelect(item: any) { preferences.tolerance = item.value; savePreferences(); return item.html; } },
-          { html: "检查间隔", tooltip: `${preferences.interval} 秒`,
+          { html: "检查间隔",icon:icon('interval'), tooltip: `${preferences.interval} 秒`,
             selector: syncIntervals.map(value => ({ html: `${value} 秒`, value, default: value === preferences.interval })),
             onSelect(item: any) { preferences.interval = item.value; savePreferences(); return item.html; } }
         ] });

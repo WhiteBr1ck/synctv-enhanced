@@ -2,7 +2,7 @@
 import Artplayer from "artplayer";
 import type { HlsConfig, FragmentLoaderConstructor, FragmentLoaderContext } from "hls.js";
 import type { Option } from "artplayer/types/option";
-import { onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { onMounted, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import type { PropType, Ref, WatchStopHandle } from "vue";
 import { destroyOldCustomPlayLib } from "@/utils";
 import type { P2pConfig as HlsP2pConfig, TrackerZone as TrackerZoneHls } from "@swarmcloud/hls";
@@ -15,6 +15,8 @@ import P2PEngineMedia, {
   type P2pConfig as P2pConfigMedia,
   type TrackerZone as TrackerZoneMedia
 } from "@swarmcloud/media";
+import {escapeLabel} from '@/utils/track-label';
+import '@/plugins/player-ui.css';
 
 const watchers: WatchStopHandle[] = [];
 
@@ -30,7 +32,7 @@ Artplayer.FAST_FORWARD_VALUE = 3; // 设置长按倍速的速率
 Artplayer.FAST_FORWARD_TIME = 1000; // 设置长按加速的延迟时间（毫秒）
 
 let art: Artplayer;
-const p2pEngine: Ref<p2pOperationType | undefined> = ref(undefined);
+const p2pEngine: Ref<p2pOperationType | undefined> = shallowRef(undefined);
 const p2pStats = ref<p2pStatsType>();
 
 const resetP2P = () => {
@@ -59,6 +61,7 @@ const p2pOperation = {
 export type { p2pOperation };
 
 export interface options {
+  title?: string;
   url: string;
   isLive?: boolean;
   type?: string;
@@ -103,10 +106,11 @@ const playMedia = async (player: HTMLMediaElement, url: string, art: any) => {
   engine
     .getProxiedUrl(url)
     .then((proxiedUrl) => {
-      console.log(proxiedUrl);
+      if (p2pEngine.value !== engine || art.isDestroy) return;
       player.src = proxiedUrl;
     })
     .catch((err) => {
+      if (p2pEngine.value !== engine || art.isDestroy) return;
       console.error(err);
       player.src = url;
     });
@@ -126,6 +130,7 @@ const playMpd = async (player: HTMLMediaElement, url: string, art: any) => {
 
   const dashjs = await import("dashjs");
   const P2pEngineDash = (await import("@swarmcloud/dashjs")).default;
+  if (art.isDestroy) return;
 
   if (!dashjs.supportsMediaSource()) {
     art.notice.show = "Unsupported playback format: mpd";
@@ -253,6 +258,7 @@ const playM3u8 = async (player: HTMLMediaElement, url: string, art: Artplayer) =
 
   const Hls = (await import("hls.js")).default;
   const P2pEngineHls = (await import("@swarmcloud/hls")).default;
+  if (art.isDestroy) return;
 
   var p2pConfig: HlsP2pConfig = {
     swFile: "/web/sw.js",
@@ -280,7 +286,7 @@ const playM3u8 = async (player: HTMLMediaElement, url: string, art: Artplayer) =
         .registerServiceWorker()
         .catch(() => {})
         .finally(() => {
-          if (!player.src) player.src = url;
+          if (p2pEngine.value === engine && !art.isDestroy && !player.src) player.src = url;
         });
       art.once("destroy", () => {
         resetP2P();
@@ -396,6 +402,7 @@ const newPlayerOption = (html: HTMLDivElement): Option => {
     airplay: false, // 隔空播放
     type: Props.options.type,
     plugins: Props.options.plugins,
+    layers:Props.options.title?[{name:'movie-title',html:escapeLabel(Props.options.title)}]:[],
     subtitle: {
       encoding: "utf-8",
       escape: false

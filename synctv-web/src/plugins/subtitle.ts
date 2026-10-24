@@ -1,148 +1,238 @@
 import Artplayer from "artplayer";
-import type { Events } from "artplayer/types/events";
 import { parseTimedText, activeTextCues, type TextCue } from "./timed-text";
+import { trackLabel, escapeLabel, type TrackMetadata } from "@/utils/track-label";
+import { controlIcon, icon } from "./icons";
 
-interface Subtitle { url: string; type: string; fonts?: string[]; embedded?: boolean; }
-interface Track extends Subtitle {
-  index: number; title: string; language: string; default: boolean; forced: boolean;
+interface Subtitle extends TrackMetadata {
+  url: string;
+  type: string;
+  fonts?: string[];
 }
-
-export function artplayerSubtitle(subtitles: Record<string, Subtitle>, discovery?: string, preferEmbedded = false) {
+interface Track extends Subtitle {
+  index: number;
+  title: string;
+  language: string;
+  default: boolean;
+  forced: boolean;
+}
+export function artplayerSubtitle(
+  subtitles: Record<string, Subtitle>,
+  discovery?: string,
+  preferEmbedded = false
+) {
   return (art: Artplayer) => {
-    const items = { ...subtitles };
-    const discoverAbort = new AbortController();
-    let selectAbort: AbortController | undefined;
-    let disposed = false, selected = "", manual = false, loading = !!discovery;
-    let objectUrl: string | undefined;
-    let textMode = false;
-    let textCues: TextCue[] = [];
-    const subtitlePrototype = Object.getPrototypeOf(art.subtitle);
-    const nativeCues = Object.getOwnPropertyDescriptor(subtitlePrototype, "cues")!.get!;
-    const nativeActive = Object.getOwnPropertyDescriptor(subtitlePrototype, "activeCues")!.get!;
-    const original = (getter: () => unknown) => {
-      try { return getter.call(art.subtitle); } catch { return []; }
-    };
-    // MKV playback can expose additional native text tracks. Do not rely on
-    // textTracks[0] or an asynchronously loaded <track> for the selected SRT.
-    Object.defineProperty(art.subtitle, "cues", { configurable: true,
-      get: () => textMode ? textCues : original(nativeCues) });
-    Object.defineProperty(art.subtitle, "activeCues", { configurable: true,
-      get: () => textMode ? activeTextCues(textCues, art.currentTime) : original(nativeActive) });
-    const refreshSubtitle = art.subtitle.update.bind(art.subtitle) as unknown as () => void;
-    const updateText = () => { if (!disposed && textMode) refreshSubtitle(); };
-    art.on("video:timeupdate", updateText);
-    art.on("video:seeked", updateText);
-    art.on("video:loadedmetadata", updateText);
-    art.on("ready", updateText);
-    const emit = (name: string, value: unknown) => art.emit(name as keyof Events, value);
-    const html = () => `<span style="background:#fff;color:#000;padding:2px 6px;border-radius:5px;font-size:14px">${loading ? "读取字幕中" : "字幕"}</span>`;
-    const select = async (name: string, isManual: boolean) => {
-      manual ||= isManual;
-      selected = name;
-      selectAbort?.abort();
-      selectAbort = new AbortController();
-      const abort = selectAbort;
+    const items = new Map<string, Subtitle>(
+      Object.entries(subtitles).map(([key, item]) => [
+        key,
+        { ...item, title: item.title || item.name || key, origin: item.origin || "external" }
+      ])
+    );
+    let selected = "",
+      selectedUrl = "",
+      manual = false,
+      disposed = false,
       textMode = false;
-      textCues = [];
-      art.subtitle.show = false;
-      art.template.$subtitle.textContent = "";
-      emit("artplayer-plugin-ass:visible", false);
-      if (name === "关闭") return;
-      const item = items[name];
-      if (!item) return;
+    let textCues: TextCue[] = [];
+    const discoveryAbort = new AbortController();
+    let selectAbort: AbortController | undefined;
+    let preference: any;
+    try {
+      preference = JSON.parse(localStorage.getItem("synctv:subtitle-track") || "null");
+    } catch {
+      /* empty */
+    }
+    const prototype = Object.getPrototypeOf(art.subtitle);
+    const nativeCues = Object.getOwnPropertyDescriptor(prototype, "cues")!.get!;
+    const nativeActive = Object.getOwnPropertyDescriptor(prototype, "activeCues")!.get!;
+    const native = (getter: () => unknown) => {
       try {
-        let url = item.url;
-        let content: Blob | undefined;
-        if (item.embedded) {
-          art.notice.show = "正在读取内封字幕…";
-          const response = await fetch(url, { signal: abort.signal });
-          if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || "内封字幕读取失败，请重新选择字幕重试");
-          }
-          const blob = await response.blob();
-          content = blob;
-          if (disposed || abort.signal.aborted) return;
-          if (objectUrl) URL.revokeObjectURL(objectUrl);
-          objectUrl = URL.createObjectURL(blob);
-          url = objectUrl;
-          art.notice.show = "";
+        return getter.call(art.subtitle);
+      } catch {
+        return [];
+      }
+    };
+    Object.defineProperty(art.subtitle, "cues", {
+      configurable: true,
+      get: () => (textMode ? textCues : native(nativeCues))
+    });
+    Object.defineProperty(art.subtitle, "activeCues", {
+      configurable: true,
+      get: () => (textMode ? activeTextCues(textCues, art.currentTime) : native(nativeActive))
+    });
+    const refreshSubtitle = art.subtitle.update.bind(art.subtitle) as unknown as () => void;
+    const refresh = () => {
+      if (!disposed && textMode) refreshSubtitle();
+    };
+    for (const event of ["video:timeupdate", "video:seeked", "ready", "restart"])
+      art.on(event as any, refresh);
+    const emit = (name: string, value: unknown) => art.emit(name as any, value);
+    const select = async (key: string, isManual = false) => {
+      selected = key;
+      manual ||= isManual;
+      selectAbort?.abort();
+      const controller = (selectAbort = new AbortController());
+      const item = items.get(key);
+      selectedUrl = item?.url || "";
+      const clear = () => {
+        textMode = false;
+        textCues = [];
+        art.subtitle.show = false;
+        art.template.$subtitle.textContent = "";
+        emit("artplayer-plugin-ass:visible", false);
+      };
+      if (isManual)
+        try {
+          localStorage.setItem(
+            "synctv:subtitle-track",
+            JSON.stringify(
+              item
+                ? {
+                    enabled: true,
+                    language: item.language,
+                    type: item.type,
+                    origin: item.origin,
+                    title: item.title
+                  }
+                : { enabled: false }
+            )
+          );
+        } catch {
+          /* storage */
         }
-        if (disposed || abort.signal.aborted) return;
-        if (["ass", "ssa"].includes(item.type.toLowerCase())) {
-          emit("artplayer-plugin-ass:switch", { url, fonts: item.fonts || [] });
-        } else {
-          const text = content ? await content.text() : await (await fetch(url, { signal: abort.signal })).text();
-          if (disposed || abort.signal.aborted) return;
-          textCues = parseTimedText(text);
-          if (!textCues.length) throw new Error("字幕文件中没有可显示的文字");
+      update();
+      if (!item) {
+        clear();
+        selectAbort = undefined;
+        return;
+      }
+      try {
+        const response = await fetch(item.url, { signal: controller.signal });
+        if (!response.ok) throw new Error("字幕读取失败，请重新选择字幕");
+        const content = await response.text();
+        if (disposed || controller.signal.aborted) return;
+        clear();
+        if (/^(ass|ssa)$/i.test(item.type))
+          emit("artplayer-plugin-ass:switch", { content, fonts: item.fonts || [] });
+        else {
+          textCues = parseTimedText(content);
+          if (!textCues.length) throw new Error("字幕中没有可显示的文字");
           textMode = true;
+          art.template.$subtitle.classList.toggle("synctv-srt", /^(srt|subrip)$/i.test(item.type));
           const offset = art.subtitleOffset;
           if (offset) art.subtitleOffset = offset;
           art.subtitle.show = true;
-          updateText();
-          art.notice.show = "";
+          refresh();
         }
       } catch (error: any) {
-        if (!disposed && !abort.signal.aborted) art.notice.show = error.message || "字幕加载失败";
+        if (!disposed && !controller.signal.aborted) art.notice.show = error.message;
+      } finally {
+        if (selectAbort === controller) {
+          selectAbort = undefined;
+          choose();
+        }
       }
     };
     const update = () => {
       if (disposed) return;
-      const selector = [...Object.keys(items), "关闭"].map(name => {
-        const label = document.createElement("span");
-        label.textContent = name;
-        return { html: label.innerHTML, name, default: name === selected };
+      const selector = [...items].map(([key, item], i) => ({
+        html: escapeLabel(trackLabel(item, `字幕 ${i + 1}`)),
+        key,
+        default: key === selected
+      }));
+      selector.push({ html: "关闭", key: "", default: !selected });
+      const onSelect = (item: any) => {
+        void select(item.key, true);
+        return controlIcon("subtitle", "字幕");
+      };
+      if (!Artplayer.utils.isMobile || art.fullscreen)
+        art.controls.update({
+          name: "subtitle",
+          position: "right",
+          html: controlIcon("subtitle", "字幕"),
+          selector,
+          onSelect
+        });
+      else if (art.controls.subtitle) art.controls.remove("subtitle");
+      art.setting.update({
+        name: "subtitle",
+        html: "字幕",
+        icon: icon("subtitle"),
+        selector,
+        onSelect: (item: any) => {
+          void select(item.key, true);
+          return item.key ? "已选择" : "关闭";
+        },
+        width: 420
       });
-      const onSelect = (item: any) => { void select(item.name, true); return html(); };
-      const control = { name: "subtitle", html: html(), selector, onSelect };
-      if (!Artplayer.utils.isMobile || art.fullscreen) art.controls.update({ ...control, position: "right" });
-      else if (art.controls["subtitle"]) art.controls.remove("subtitle");
-      art.setting.update(control);
+    };
+    const choose = () => {
+      if (disposed || selectAbort) return;
+      if (manual) {
+        const same = items.get(selected);
+        if (same && same.url !== selectedUrl) void select(selected);
+        return;
+      }
+      if (preference?.enabled === false) {
+        void select("");
+        return;
+      }
+      const entries = [...items];
+      const match =
+        (preference &&
+          entries.find(
+            ([, t]) =>
+              t.language === preference.language &&
+              t.type === preference.type &&
+              t.origin === preference.origin &&
+              t.title === preference.title
+          )) ||
+        (preference &&
+          entries.find(
+            ([, t]) => t.language === preference.language && t.type === preference.type
+          )) ||
+        entries.find(([, t]) => t.default) ||
+        entries.find(([, t]) => /^(zh|chi|zho|chs|cht)/i.test(t.language || "")) ||
+        entries[0];
+      if (match && (match[0] !== selected || match[1].url !== selectedUrl)) void select(match[0]);
     };
     update();
-    const originalNames = Object.keys(items);
-    const originalDefault = originalNames.find(name => /默认|default/i.test(name)) || originalNames[0];
-    if (originalDefault && !preferEmbedded) void select(originalDefault, false);
+    // Jellyfin's existing subtitle URL is usable immediately. Probing the
+    // original file (including fonts) must not hold up subtitles after a switch.
+    choose();
+    if (discovery)
+      void (async () => {
+        try {
+          const response = await fetch(discovery, { signal: discoveryAbort.signal });
+          if (!response.ok) throw new Error("字幕轨道读取失败");
+          const { tracks } = (await response.json()) as { tracks: Track[] };
+          if (disposed) return;
+          for (const track of tracks) {
+            let metadata: Subtitle | undefined;
+            let target = `embedded:${track.index}`;
+            for (const [key, old] of items)
+              if (old.origin === "embedded" && old.index === track.index) {
+                metadata = old;
+                target = key;
+                items.delete(key);
+              }
+            const title =
+              track.title && track.title !== track.language
+                ? track.title
+                : metadata?.title || track.title;
+            items.set(target, { ...metadata, ...track, title, origin: "embedded" });
+          }
+          update();
+          choose();
+        } catch {
+          if (!disposed) choose();
+        }
+      })();
     art.on("fullscreen", update);
     art.on("destroy", () => {
       disposed = true;
-      discoverAbort.abort();
+      discoveryAbort.abort();
       selectAbort?.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     });
-    if (discovery) {
-      void (async () => {
-        try {
-          const response = await fetch(discovery, { signal: discoverAbort.signal });
-          const value = await response.json();
-          if (!response.ok) throw new Error(value.error || "内封字幕读取失败");
-          if (disposed) return;
-          const tracks: Track[] = value.tracks;
-          for (const track of tracks) {
-            const name = `内封 · ${track.title} · ${track.type.toUpperCase()} [${track.index}]`;
-            items[name] = { ...track, embedded: true };
-          }
-          loading = false;
-          if (!manual && (originalNames.length === 0 || preferEmbedded) && tracks.length) {
-            const preferred = tracks.find(track => /^(zh|zho|chi|chs|cht)(-|$)/i.test(track.language) || /中文|简体|繁体/.test(track.title))
-              || tracks.find(track => track.default) || tracks[0];
-            const name = `内封 · ${preferred.title} · ${preferred.type.toUpperCase()} [${preferred.index}]`;
-            void select(name, false);
-          } else if (!manual && preferEmbedded && !tracks.length && originalDefault) {
-            void select(originalDefault, false);
-          }
-          update();
-        } catch (error: any) {
-          if (!disposed && !discoverAbort.signal.aborted) {
-            loading = false;
-            update();
-            art.notice.show = error.message || "内封字幕读取失败，请重新打开视频重试";
-            if (!manual && originalDefault) void select(originalDefault, false);
-          }
-        }
-      })();
-    }
     return { name: "artplayerSubtitle" };
   };
 }

@@ -1,4 +1,4 @@
-import { ref, computed, reactive } from "vue";
+import { ref, computed, reactive, watch } from "vue";
 import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { useRouteParams } from "@vueuse/router";
@@ -57,6 +57,22 @@ export const roomStore = defineStore("roomStore", () => {
   const viewerCount = ref(1);
 
   const folder = ref<MoviePath[]>();
+  const browserPage=ref(1),browserPageSize=ref(10),browserKeyword=ref(''),browserDynamic=ref(false);
+  const browserStates=useLocalStorage<Record<string,{folder:MoviePath[];page:number;size:number;keyword:string}>>('synctv:room-browsers',{});
+  let browserRoom='';
+  const restoreBrowser=(id:string)=>{
+    if(browserRoom===id&&folder.value)return;
+    browserRoom=id;
+    const saved=browserStates.value?.[id];
+    folder.value=Array.isArray(saved?.folder)?saved.folder.filter(p=>typeof p.id==='string'&&typeof p.name==='string').slice(0,32):undefined;
+    browserPage.value=Number.isInteger(saved?.page)&&saved.page>0?saved.page:1;
+    browserPageSize.value=[10,20,30,40,50,100].includes(saved?.size)?saved.size:10;
+    browserKeyword.value=typeof saved?.keyword==='string'?saved.keyword:'';
+    browserDynamic.value=false;
+  };
+  watch([folder,browserPage,browserPageSize,browserKeyword],()=>{
+    if(browserRoom&&folder.value)browserStates.value[browserRoom]={folder:folder.value,page:browserPage.value,size:browserPageSize.value,keyword:browserKeyword.value};
+  },{deep:true});
 
   const lastFolderId = computed(() => {
     return folder.value && folder.value.length > 0 ? folder.value[folder.value.length - 1].id : "";
@@ -80,6 +96,7 @@ export const roomStore = defineStore("roomStore", () => {
     myInfo,
     roomID,
     folder,
+    restoreBrowser,browserPage,browserPageSize,browserKeyword,browserDynamic,
     lastFolderId,
     lastFolderSubPath
   };

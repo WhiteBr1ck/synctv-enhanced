@@ -93,8 +93,9 @@ defineExpose({
       </template>
     </el-breadcrumb-item>
   </el-breadcrumb>
+  <div class="my-2 flex items-center gap-2">
   <el-input
-    class="my-2"
+    class="min-w-0 flex-1"
     v-if="enableSearch"
     v-model="keywords"
     placeholder="搜索"
@@ -106,6 +107,7 @@ defineExpose({
     </template>
   </el-input>
   <SortSelector label="文件排序" v-model="fileSort" @change="refresh(true, false)" :metadata="metadata" :modified-disabled="!!keywords" :disabled="isLoading" />
+  </div>
   <div v-loading="!fileList || isLoading">
     <div class="flex px-1 py-1">
       <p class="mr-auto">名称</p>

@@ -3,6 +3,7 @@ import { useLocalStorage } from "@vueuse/core";
 import { sortedPage } from "@/utils/list-sort";
 import { ElNotification } from "element-plus";
 import { roomStore } from "@/stores/room";
+import { storeToRefs } from "pinia";
 import {
   moviesApi,
   currentMovieApi,
@@ -21,9 +22,8 @@ const room = roomStore();
 
 export const useMovieApi = (token: string, roomId: string) => {
   // 获取影片列表和正在播放的影片
-  const currentPage = ref(1);
-  const pageSize = ref(10);
-  const dynamic = ref(false);
+  room.restoreBrowser(roomId);
+  const {browserPage:currentPage,browserPageSize:pageSize,browserDynamic:dynamic}=storeToRefs(room);
   const savedMovieSort = useLocalStorage("synctv:movie-sort", "original");
   const movieSort = ref(savedMovieSort.value);
   watch(savedMovieSort, value => { movieSort.value = value; });
@@ -35,6 +35,7 @@ export const useMovieApi = (token: string, roomId: string) => {
 
   const switchDir = async (id: string, subPath?: string) => {
     currentPage.value = 1;
+    room.browserKeyword='';
     movieSort.value = savedMovieSort.value;
     return await getMovies(id, subPath);
   };
@@ -47,7 +48,8 @@ export const useMovieApi = (token: string, roomId: string) => {
     listingRequest?.abort();
     const controller = listingRequest = new AbortController();
     const folderId = id === undefined ? room.lastFolderId : id;
-    const folderSubPath = subPath === undefined ? room.lastFolderSubPath : subPath;
+    const folderSubPath = subPath === undefined ? (id === undefined ? room.lastFolderSubPath : '') : subPath;
+    keyword=keyword===undefined?room.browserKeyword:keyword;
     sorting.value = true;
     if (keyword && movieSort.value.startsWith("modified-")) movieSort.value = "name-asc";
     try {
@@ -84,6 +86,10 @@ export const useMovieApi = (token: string, roomId: string) => {
       dynamic.value = result.dynamic || false;
     } catch (err: any) {
       if (generation !== listingGeneration) return;
+      if(id===undefined&&folderId&&[400,403,404].includes(err.response?.status)){
+        room.folder=undefined;room.browserKeyword='';currentPage.value=1;
+        return getMovies('','','');
+      }
       console.log(err);
       ElNotification({
         title: "获取影片列表失败",
@@ -98,16 +104,23 @@ export const useMovieApi = (token: string, roomId: string) => {
   // 获取正在播放的影片
   const { state: currentMovie, execute: reqCurrentMovieApi, isLoading: isLoadingCurrent } =
     currentMovieApi();
+  let currentGeneration=0;
+  let currentRequest:AbortController|undefined;
+  onBeforeUnmount(()=>{currentGeneration++;currentRequest?.abort();});
   const getCurrentMovie = async () => {
+    const generation=++currentGeneration;
+    currentRequest?.abort();
+    const controller=currentRequest=new AbortController();
     try {
       await reqCurrentMovieApi({
+        signal:controller.signal,
         headers: {
           Authorization: token,
           "X-Room-Id": roomId
         }
       });
 
-      if (!currentMovie.value) return;
+      if (generation!==currentGeneration||!currentMovie.value) return;
 
       room.currentStatus = currentMovie.value.status;
       room.currentExpireId = currentMovie.value.expireId;
@@ -137,6 +150,7 @@ export const useMovieApi = (token: string, roomId: string) => {
       }
       room.currentMovie = currentMovie.value.movie;
     } catch (err: any) {
+      if(controller.signal.aborted)return;
       console.log(err);
       ElNotification({
         title: "获取影片列表失败",

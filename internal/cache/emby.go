@@ -70,15 +70,30 @@ type EmbySource struct {
 }
 
 type EmbySubtitleCache struct {
-	Cache *refreshcache0.RefreshCache[[]byte]
-	URL   string
-	Type  string
-	Name  string
+	Cache    *refreshcache0.RefreshCache[[]byte]
+	URL      string
+	Type     string
+	Name     string
+	Language string
+	Title    string
+	Origin   string
+	Index    uint64
+	Default  bool
 }
 
 type EmbyMovieCacheData struct {
+	Name               string
+	VideoRange         string
 	TranscodeSessionID string
 	Sources            []EmbySource
+}
+
+func (s *EmbySubtitleCache) Subtitle() *model.Subtitle {
+	name := s.Title
+	if name == "" {
+		name = s.Name
+	}
+	return &model.Subtitle{URL: s.URL, Type: s.Type, Name: name, Language: s.Language, Origin: s.Origin, Index: s.Index, Default: s.Default}
 }
 
 type EmbyMovieCache = refreshcache1.RefreshCache[*EmbyMovieCacheData, *EmbyUserCache]
@@ -167,6 +182,25 @@ func NewEmbyMovieCacheInitFunc(
 		resp := &EmbyMovieCacheData{
 			Sources:            make([]EmbySource, 0, len(data.GetMediaSourceInfo())*3),
 			TranscodeSessionID: data.GetPlaySessionID(),
+		}
+		if movie.IsFolder {
+			if item, e := vendor.LoadEmbyClient(aucd.Backend).GetItem(ctx, &emby.GetItemReq{Host: aucd.Host, Token: aucd.APIKey, ItemId: truePath}); e == nil {
+				resp.Name = item.GetName()
+			}
+		}
+		for _, ms := range data.GetMediaSourceInfo() {
+			for _, stream := range ms.GetMediaStreamInfo() {
+				if stream.GetType() == "Video" {
+					resp.VideoRange = stream.GetVideoRangeType()
+					if resp.VideoRange == "" {
+						resp.VideoRange = stream.GetVideoRange()
+					}
+					break
+				}
+			}
+			if resp.VideoRange != "" {
+				break
+			}
 		}
 
 		u, err := url.Parse(aucd.Host)
@@ -332,10 +366,15 @@ func processEmbySubtitles(
 			}
 		}
 
+		origin := "embedded"
+		if msi.GetIsExternal() {
+			origin = "external"
+		}
 		subtitles = append(subtitles, &EmbySubtitleCache{
-			URL:   url,
-			Type:  subtutleType,
-			Name:  name,
+			URL:      url,
+			Type:     subtutleType,
+			Name:     name + " [" + strconv.FormatUint(msi.GetIndex(), 10) + "]",
+			Language: msi.GetLanguage(), Title: msi.GetTitle(), Origin: origin, Index: msi.GetIndex(), Default: msi.GetIsDefault(),
 			Cache: refreshcache0.NewRefreshCache(newEmbySubtitleCacheInitFunc(url), -1),
 		})
 	}

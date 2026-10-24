@@ -1,11 +1,12 @@
-export interface SubtitleAppearance { scale: number; lift: number; }
+export interface SubtitleAppearance { scale: number; lift: number; color: string; }
 export const subtitleAppearanceKey = "synctv:subtitle-appearance";
 export const subtitleScales = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const subtitleLifts = [0, 5, 10, 15, 20];
 
 export function normalizeAppearance(value: Partial<SubtitleAppearance> = {}): SubtitleAppearance {
   return { scale: subtitleScales.includes(value.scale!) ? value.scale! : 1,
-    lift: subtitleLifts.includes(value.lift!) ? value.lift! : 0 };
+    lift: subtitleLifts.includes(value.lift!) ? value.lift! : 0,
+    color: /^#[a-f\d]{6}$/i.test(value.color || '') ? value.color! : '#ffffff' };
 }
 
 export function loadSubtitleAppearance(): SubtitleAppearance {

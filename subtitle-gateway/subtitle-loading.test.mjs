@@ -1,0 +1,57 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {stripTypeScriptTypes} from 'node:module';
+
+// Exercise the real loader with delayed HTTP responses. Only Artplayer's DOM
+// adapter is replaced; parsing, selection, aborts and discovery run unchanged.
+let source=await readFile(new URL('../synctv-web/src/plugins/subtitle.ts',import.meta.url),'utf8');
+source=source.replace('import Artplayer from "artplayer";','const Artplayer={utils:{isMobile:false}};');
+for(const [name,path] of Object.entries({'./timed-text':'../synctv-web/src/plugins/timed-text.ts','@/utils/track-label':'../synctv-web/src/utils/track-label.ts','./icons':'../synctv-web/src/plugins/icons.ts'}))source=source.replace(`"${name}"`,JSON.stringify(new URL(path,import.meta.url).href));
+const {artplayerSubtitle}=await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source,{mode:'transform'})).toString('base64'));
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
+const text=value=>({ok:true,text:async()=>value});
+function player(){
+  const events=new Map(),controls=new Map(),state={visible:false,tracks:[]};
+  const subtitle=Object.create({get cues(){return [];},get activeCues(){return [];}});
+  Object.assign(subtitle,{show:false,update(){}});
+  return {state,controls: {update:v=>controls.set(v.name,v)},setting:{update(){}},subtitle,
+    template:{$subtitle:{textContent:'',classList:{toggle(){}}}},
+    on:(name,callback)=>events.set(name,[...(events.get(name)||[]),callback]),
+    emit(name,value){if(name==='artplayer-plugin-ass:visible')state.visible=value;if(name==='artplayer-plugin-ass:switch'){state.visible=true;state.tracks.push(value);}for(const cb of events.get(name)||[])cb(value);},
+    notice:{show:''},currentTime:10,subtitleOffset:0,
+    select:key=>controls.get('subtitle').onSelect({key})};
+}
+
+test('episode subtitles start before discovery and stay visible while embedded extraction is pending',async()=>{
+  const originalFetch=globalThis.fetch,originalStorage=globalThis.localStorage;
+  const discovery=deferred(),embedded=deferred();
+  globalThis.localStorage={getItem:()=>null,setItem(){}};
+  globalThis.fetch=async url=>url==='native'?text('native ASS'):url==='tracks'?discovery.promise:embedded.promise;
+  const art=player();
+  try{
+    artplayerSubtitle({native:{url:'native',type:'ass',origin:'embedded',language:'chi',index:2,default:true}},'tracks',true)(art);
+    await tick();assert.equal(art.state.tracks[0].content,'native ASS');
+    discovery.resolve({ok:true,json:async()=>({tracks:[{url:'embedded',type:'ass',index:2,language:'chi',default:true,fonts:['font.ttf']}]})});
+    await tick();assert.equal(art.state.visible,true);assert.equal(art.state.tracks.length,1);
+    embedded.resolve(text('extracted ASS'));await tick();
+    assert.equal(art.state.tracks.at(-1).content,'extracted ASS');assert.deepEqual(art.state.tracks.at(-1).fonts,['font.ttf']);
+  }finally{art.emit('destroy');globalThis.fetch=originalFetch;globalThis.localStorage=originalStorage;}
+});
+
+test('late subtitle responses cannot replace a newer selection or a destroyed episode',async()=>{
+  const originalFetch=globalThis.fetch,originalStorage=globalThis.localStorage;
+  const first=deferred(),second=deferred();
+  globalThis.localStorage={getItem:()=>null,setItem(){}};
+  globalThis.fetch=async url=>url==='first'?first.promise:second.promise;
+  const art=player();
+  try{
+    artplayerSubtitle({first:{url:'first',type:'ass'},second:{url:'second',type:'ass'}})(art);
+    art.select('second');second.resolve(text('second ASS'));await tick();
+    first.resolve(text('stale ASS'));await tick();
+    assert.deepEqual(art.state.tracks.map(t=>t.content),['second ASS']);
+    const pending=deferred();globalThis.fetch=()=>pending.promise;art.select('first');art.emit('destroy');pending.resolve(text('destroyed ASS'));await tick();
+    assert.deepEqual(art.state.tracks.map(t=>t.content),['second ASS']);
+  }finally{globalThis.fetch=originalFetch;globalThis.localStorage=originalStorage;}
+});

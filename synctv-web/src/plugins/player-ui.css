@@ -1,0 +1,71 @@
+.synctv-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: inherit;
+}
+.synctv-icon {
+  display: block;
+  flex-shrink: 0;
+}
+.art-video-player svg.synctv-icon {
+  fill: none !important;
+  stroke: currentColor;
+}
+.art-video-player .art-controls-right .art-control {
+  padding: 0 7px;
+}
+.art-video-player .art-selector-list {
+  max-width: min(620px, 85vw);
+  max-height: 50vh;
+  overflow-y: auto;
+  right: 0;
+}
+.art-video-player .art-selector-item {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  height: auto;
+  min-height: 36px;
+  padding: 9px 14px;
+}
+.art-video-player .art-setting-panel {
+  max-width: 85vw;
+}
+.art-video-player .art-subtitle.synctv-srt,
+.art-video-player .art-subtitle.synctv-srt .art-subtitle-line,
+.art-video-player .art-subtitle.synctv-srt .art-subtitle-line * {
+  color: var(--synctv-srt-color, #fff) !important;
+}
+.art-video-player .art-layer-movie-title {
+  position: absolute;
+  inset: 0 0 auto;
+  box-sizing: border-box;
+  padding: 12px 16px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px #000;
+  background: linear-gradient(#0009, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.art-video-player.art-control-show .art-layer-movie-title,
+.art-video-player.art-mask-show .art-layer-movie-title {
+  opacity: 1;
+}
+.chat-new-messages {
+  display: block;
+  margin: 8px auto 0;
+  padding: 5px 12px;
+  border-radius: 16px;
+  color: #fff;
+  background: #2563eb;
+  font-size: 13px;
+}

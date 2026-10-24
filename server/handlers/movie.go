@@ -61,7 +61,6 @@ func genMovieInfo(
 	if movie.Type == "" && movie.URL != "" {
 		movie.Type = utils.GetURLExtension(movie.URL)
 	}
-
 	switch {
 	case movie.VendorInfo.Vendor != "":
 		vendor, err := vendors.NewVendorService(room, opMovie)
@@ -124,6 +123,9 @@ func genMovieInfo(
 		movie.Headers = nil
 	}
 
+	if movie.IsFolder && movie.VendorInfo.Vendor == dbModel.VendorAlist && opMovie.SubPath() != "" {
+		movie.Name = filepath.Base(opMovie.SubPath())
+	}
 	if movie.Type == "" && movie.URL != "" {
 		movie.Type = utils.GetURLExtension(movie.URL)
 	}

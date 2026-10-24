@@ -29,6 +29,7 @@ export interface MoreSource {
 }
 
 export interface BaseMovieInfo {
+  videoRange?: string;
   playbackMode?: "direct" | "transcode";
   mediaInfoSource?: string;
   url: string;

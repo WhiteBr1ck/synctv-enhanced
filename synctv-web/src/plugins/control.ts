@@ -179,7 +179,7 @@ export default function artplayerPluginMediaControl() {
       }
       const currentSource=art.plugins?.source?.currentSource?.();
       const sourceOptions=sources.length>1?sources.map((source:any,index:number)=>{
-        const label=/H\.264/i.test(source.html)?'H.264 兼容':/原画|^raw$/i.test(source.html)?'原画':source.html==='默认'?(source.playbackMode==='transcode'?'自动处理':'默认'):`线路 ${index+1}`;
+        const label=/^H\.264(?:\s|$)/i.test(source.html)?'H.264 兼容':/^原画|^raw$/i.test(source.html)?'原画':source.html==='默认'?(source.playbackMode==='transcode'?'自动处理':'默认'):`线路 ${index+1}`;
         return {html:label,sourceIndex:index,default:source.url===currentSource?.url};
       }):[];
       selector.unshift(...sourceOptions);

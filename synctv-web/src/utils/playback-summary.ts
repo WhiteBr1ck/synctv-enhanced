@@ -27,7 +27,7 @@ export function playbackSummary(
   } catch {
     /* not a URL */
   }
-  const compatibility = /H\.264/i.test(source.html || "");
+  const compatibility = /^H\.264(?:\s|$)/i.test(source.html || "");
   const original =
     source.playbackMode === "direct" ||
     /原画|^raw$/i.test(source.html || "") ||

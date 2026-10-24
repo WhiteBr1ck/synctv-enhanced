@@ -11,6 +11,8 @@ test('separates container remuxing from audio-only and video transcoding',()=>{
   assert.equal(info.transcoded,false);assert.equal(info.codec,'HEVC');assert.equal(info.depth,10);assert.equal(info.dynamicRange,'SDR');assert.match(info.audio,/转码 · AAC/);
   const raw=playbackSummary({html:'原画',type:'mkv',playbackMode:'direct'},{codec:'hevc',bitDepth:10,dynamicRange:'HDR / PQ'},[{codec:'flac',channels:2,default:true}]);
   assert.equal(raw.dynamicRange,'HDR');assert.match(raw.audio,/直通 · FLAC/);
+  const titled=playbackSummary({html:'原画直通 · Example.H.264.1080p',type:'mkv',playbackMode:'direct'},{codec:'h264',bitDepth:8,dynamicRange:'SDR'});
+  assert.equal(titled.transcoded,false);assert.equal(titled.codec,'H.264');assert.match(titled.audio,/直通/);
 });
 test('track labels preserve origin, language, codec and title without HTML injection',()=>{
   assert.equal(trackLabel({origin:'external',language:'jpn',type:'ass',title:'Signs'},'Subtitle'),'外挂 · 日语 · ASS · Signs');

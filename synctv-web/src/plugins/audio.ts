@@ -103,7 +103,7 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
     const currentIsOriginal = () => {
       if (!/^(mkv|mp4|m4v|mov|webm)$/i.test(art.option.type || context.type)) return false;
       const current = art.plugins?.source?.currentSource?.();
-      return !current || current.html === "默认" || current.html === "raw";
+      return !current || current.html === "默认" || current.html === "raw" || current.playbackMode === "direct";
     };
     const update = () => {
       if (disposed || !tracks.length || !currentIsOriginal()) {

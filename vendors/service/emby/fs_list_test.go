@@ -2,6 +2,7 @@ package emby
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	pb "github.com/synctv-org/vendors/api/emby"
+	client "github.com/synctv-org/vendors/vendors/emby"
 )
 
 func TestFsListOmitsPlaybackSources(t *testing.T) {
@@ -43,6 +45,25 @@ func TestFsListOmitsPlaybackSources(t *testing.T) {
 	}
 	if !listed || len(result.GetItems()) != 1 || result.GetItems()[0].GetName() != "Series 2" {
 		t.Fatal("directory listing changed")
+	}
+}
+
+func TestEpisodeDisplayNames(t *testing.T) {
+	for _, tc := range []struct{ input, expected string }{
+		{`{"Name":"Title","Type":"Episode","IndexNumber":1,"ParentIndexNumber":1}`, "S01E01 · Title"},
+		{`{"Name":"Special","Type":"Episode","IndexNumber":2,"ParentIndexNumber":0}`, "S00E02 · Special"},
+		{`{"Name":"Double","Type":"Episode","IndexNumber":9,"IndexNumberEnd":10,"ParentIndexNumber":2}`, "S02E09-E10 · Double"},
+		{`{"Name":"Title","Type":"Episode","IndexNumber":5}`, "E05 · Title"},
+		{`{"Name":"Unknown","Type":"Episode"}`, "Unknown"},
+		{`{"Name":"Movie","Type":"Movie","IndexNumber":1}`, "Movie"},
+	} {
+		var item client.Items
+		if err := json.Unmarshal([]byte(tc.input), &item); err != nil {
+			t.Fatal(err)
+		}
+		if got := item2pb(&item).GetName(); got != tc.expected {
+			t.Fatalf("got %q, expected %q", got, tc.expected)
+		}
 	}
 }
 

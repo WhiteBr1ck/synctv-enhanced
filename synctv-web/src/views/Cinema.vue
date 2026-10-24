@@ -33,6 +33,7 @@ import { roomInfoApi, chatHistoryApi } from "@/services/apis/room";
 import { CHAT_HISTORY_LIMIT, chatText, mergeChatHistory, type ChatEntry } from "@/utils/chat-history";
 import { artplayerSubtitle } from "@/plugins/subtitle";
 import { artplayerVideoInfo } from "@/plugins/video-info";
+import { artplayerSubtitleStyle } from "@/plugins/subtitle-style";
 import { artplayerEmbeddedAudio } from "@/plugins/audio";
 import { sendDanmu, artplayerStreamDanmu } from "@/plugins/danmu";
 import { indexStore } from "@/stores";
@@ -208,6 +209,7 @@ const playerOption = computed<options>(() => {
 
   if (room.currentMovie.base!.subtitles || room.currentMovie.base!.embeddedSubtitleSource) {
     option.plugins!.push(artplayerPluginAss({}));
+    option.plugins!.push(artplayerSubtitleStyle());
     option.plugins!.push(artplayerSubtitle(
       Object.assign({}, room.currentMovie.base!.subtitles),
       room.currentMovie.base!.embeddedSubtitleSource,
@@ -293,9 +295,9 @@ const listenPlayerType = (player: Artplayer) => {
   });
 };
 
-const setPlayerStatus = (status: Status) => {
+const setPlayerStatus = (status: Status, reason?: string) => {
   if (!player) return;
-  player.plugins["syncPlugin"].setAndNoPublishStatus(status);
+  player.plugins["syncPlugin"].setAndNoPublishStatus(status, reason);
 };
 
 // key: userId:connId
@@ -594,7 +596,7 @@ const handleElementMessage = (msg: Message) => {
           });
           break;
       }
-      setPlayerStatus(msg.playbackStatus!);
+      setPlayerStatus(msg.playbackStatus!, msg.type === MessageType.CHECK_STATUS ? "房间定时校准" : msg.type === MessageType.SYNC ? "手动同步" : "成员操作");
       break;
     }
 

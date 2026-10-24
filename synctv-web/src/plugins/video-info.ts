@@ -13,6 +13,11 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
     let request: AbortController | undefined;
     let timer: ReturnType<typeof setInterval> | undefined;
     let disposed = false;
+    let lastBuffer = "尚无缓冲等待记录";
+    let waits = 0;
+    const buffering = () => { lastBuffer = `${new Date().toLocaleTimeString()} · 等待数据（累计 ${++waits} 次）`; };
+    art.on("video:waiting", buffering);
+    art.on("video:stalled", buffering);
     const panel = art.template.$infoPanel;
     art.template.$info.classList.add("synctv-video-info");
     const section = document.createElement("div");
@@ -38,6 +43,10 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
     add("range", "片源动态范围");
     add("color", "片源色彩");
     add("audio", "声音播放");
+    add("buffer", "前方缓冲");
+    add("waiting", "最近缓冲等待");
+    add("sync", "最近同步跳转");
+    add("switch", "最近换源");
     add("display", "本机 HDR 能力", "浏览器报告的显示能力；不代表当前画面正在以 HDR 输出。");
     add("decode", "本机编码支持", "代表性编码规格的基础检测；不保证当前影片的封装、级别和完整规格都兼容。");
     const note = document.createElement("div");
@@ -60,6 +69,16 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       set("range", info?.video?.dynamicRange || "未知");
       set("color", [info?.video?.colorPrimaries, info?.video?.colorTransfer, info?.video?.colorSpace].filter(Boolean).join(" / ") || "未标注");
       set("audio", art.plugins?.audioCompat?.status?.() || "浏览器原生音频");
+      const video = art.video;
+      let ahead = 0;
+      for (let i = 0; i < video.buffered.length; i++) {
+        if (video.buffered.start(i) <= video.currentTime && video.buffered.end(i) >= video.currentTime) ahead = video.buffered.end(i) - video.currentTime;
+      }
+      const quality = video.getVideoPlaybackQuality?.();
+      set("buffer", `${ahead.toFixed(1)} 秒 · readyState ${video.readyState}${quality ? ` · 丢帧 ${quality.droppedVideoFrames}/${quality.totalVideoFrames}` : ""}${video.error ? ` · 播放错误 ${video.error.code}` : ""}`);
+      set("waiting", lastBuffer);
+      set("sync", art.plugins?.syncPlugin?.lastCorrection?.() || "无房间同步记录");
+      set("switch", art.plugins?.source?.lastChange?.() || "初始播放");
       let hdr: boolean | undefined;
       try { hdr = window.matchMedia("(dynamic-range: high)").matches; } catch { /* unavailable */ }
       set("display", hdr ? "浏览器报告支持 HDR" : "未报告 HDR 能力（未开启或检测不受支持）");

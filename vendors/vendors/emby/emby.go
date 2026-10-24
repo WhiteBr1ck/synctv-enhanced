@@ -156,6 +156,7 @@ type MediaStreams struct {
 	DisplayTitle           string  `json:"DisplayTitle"`
 	AspectRatio            string  `json:"AspectRatio"`
 	VideoRange             string  `json:"VideoRange"`
+	VideoRangeType         string  `json:"VideoRangeType"`
 	BitDepth               int     `json:"BitDepth"`
 	AverageFrameRate       float64 `json:"AverageFrameRate"`
 	RealFrameRate          float64 `json:"RealFrameRate"`
@@ -366,10 +367,10 @@ type Items struct {
 	Bitrate              int              `json:"Bitrate"`
 	RunTimeTicks         int              `json:"RunTimeTicks"`
 	ProductionYear       int              `json:"ProductionYear"`
-	IndexNumber          int              `json:"IndexNumber"`
+	IndexNumber          *int             `json:"IndexNumber"`
 	Size                 int              `json:"Size"`
-	IndexNumberEnd       int              `json:"IndexNumberEnd"`
-	ParentIndexNumber    int              `json:"ParentIndexNumber"`
+	IndexNumberEnd       *int             `json:"IndexNumberEnd"`
+	ParentIndexNumber    *int             `json:"ParentIndexNumber"`
 	SpecialFeatureCount  int              `json:"SpecialFeatureCount"`
 	LocalTrailerCount    int              `json:"LocalTrailerCount"`
 	PartCount            int              `json:"PartCount"`

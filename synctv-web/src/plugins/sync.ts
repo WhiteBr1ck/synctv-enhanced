@@ -32,12 +32,13 @@ const artPlay = async (art: Artplayer) => {
 
 interface syncPlugin {
   name: string;
-  setAndNoPublishSeek: (seek: number) => void;
+  setAndNoPublishSeek: (seek: number, reason?: string) => void;
   setAndNoPublishPlay: () => void;
   setAndNoPublishPause: () => void;
   setAndNoPublishRate: (rate: number) => void;
-  setAndNoPublishStatus: (status: Status) => void;
+  setAndNoPublishStatus: (status: Status, reason?: string) => void;
   currentStatus: () => Status;
+  lastCorrection: () => string;
 }
 
 const debounceTime = 500;
@@ -80,6 +81,7 @@ export const newSyncPlugin = (
     const playingStatusDebounce = debounces(debounceTime);
 
     let lastestSeek = 0;
+    let lastCorrection = "尚未发生同步跳转";
 
     const publishSeek = () => {
       console.groupCollapsed("广播视频空降");
@@ -107,9 +109,10 @@ export const newSyncPlugin = (
       __publishSeekDebounce();
     };
 
-    const setAndNoPublishSeek = (seek: number) => {
+    const setAndNoPublishSeek = (seek: number, reason = "房间同步") => {
       lastestSeek = Date.now();
       if (art.option.isLive || Math.abs(art.currentTime - seek) < 2) return;
+      lastCorrection = `${new Date().toLocaleTimeString()} · ${reason}：${art.currentTime.toFixed(1)} → ${seek.toFixed(1)} 秒`;
       console.groupCollapsed("设置seek(非广播)");
       console.log("seek:", seek);
       console.log("rate:", art.playbackRate);
@@ -251,7 +254,7 @@ export const newSyncPlugin = (
       );
     };
 
-    const setAndNoPublishStatus = async (status: Status) => {
+    const setAndNoPublishStatus = async (status: Status, reason?: string) => {
       console.groupCollapsed("设置状态(非广播)");
       console.log("seek:", status.currentTime);
       console.log("rate:", status.playbackRate);
@@ -259,7 +262,7 @@ export const newSyncPlugin = (
       console.groupEnd();
       if (!art.option.isLive) {
         setAndNoPublishRate(status.playbackRate);
-        setAndNoPublishSeek(status.currentTime);
+        setAndNoPublishSeek(status.currentTime, reason);
       }
       status.isPlaying ? await setAndNoPublishPlay() : setAndNoPublishPause();
     };
@@ -333,7 +336,8 @@ export const newSyncPlugin = (
       setAndNoPublishPause,
       setAndNoPublishRate,
       setAndNoPublishStatus,
-      currentStatus
+      currentStatus,
+      lastCorrection: () => lastCorrection
     };
   };
 };

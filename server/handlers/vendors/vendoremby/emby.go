@@ -169,7 +169,7 @@ func (s *EmbyVendorService) handleProxyMovie(ctx *gin.Context) {
 	}
 
 	if embyC.Sources[source].IsTranscode {
-		ctx.Redirect(http.StatusFound, embyC.Sources[source].URL)
+		ctx.Redirect(http.StatusFound, viewerSourceURL(embyC.Sources[source].URL, embyC.Sources[source].IsCompatibility))
 		return
 	}
 
@@ -287,7 +287,8 @@ func (s *EmbyVendorService) GenMovieInfo(
 		return nil, errors.New("no source")
 	}
 
-	movie.URL = data.Sources[0].URL
+	movie.URL = viewerSourceURL(data.Sources[0].URL, data.Sources[0].IsCompatibility)
+	movie.Type = utils.GetURLExtension(movie.URL)
 	movie.PlaybackMode = playbackMode(data.Sources[0].IsTranscode)
 	for _, s := range data.Sources[0].Subtitles {
 		if movie.Subtitles == nil {
@@ -304,7 +305,8 @@ func (s *EmbyVendorService) GenMovieInfo(
 		movie.MoreSources = append(movie.MoreSources,
 			&dbModel.MoreSource{
 				Name:         s.Name,
-				URL:          s.URL,
+				URL:          viewerSourceURL(s.URL, s.IsCompatibility),
+				Type:         utils.GetURLExtension(s.URL),
 				PlaybackMode: playbackMode(s.IsTranscode),
 			},
 		)
@@ -418,4 +420,20 @@ func playbackMode(transcode bool) string {
 		return "transcode"
 	}
 	return "direct"
+}
+
+// Each viewer's compatibility encoder gets a separate Jellyfin session. Seeking
+// in one browser must not restart another browser's transcoding process.
+func viewerSourceURL(raw string, compatibility bool) string {
+	if !compatibility {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	q := u.Query()
+	q.Set("PlaySessionId", utils.SortUUID())
+	u.RawQuery = q.Encode()
+	return u.String()
 }

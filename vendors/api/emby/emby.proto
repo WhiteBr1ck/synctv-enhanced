@@ -115,6 +115,9 @@ message MediaStreamInfo {
   bool isDefault = 7;
   uint64 index = 8;
   string protocol = 9;
+  string videoRange = 10;
+  string colorTransfer = 11;
+  string videoRangeType = 12;
 }
 
 message MediaSourceInfo {

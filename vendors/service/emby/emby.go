@@ -56,6 +56,9 @@ func mediaStreamInfo2pb(msi []emby.MediaStreams) []*pb.MediaStreamInfo {
 			IsDefault:       msi.IsDefault,
 			Index:           msi.Index,
 			Protocol:        msi.Protocol,
+			VideoRange:      msi.VideoRange,
+			ColorTransfer:   msi.ColorTransfer,
+			VideoRangeType:  msi.VideoRangeType,
 		}
 	}
 	return pbmsi
@@ -83,7 +86,7 @@ func mediaSources2pb(ms []emby.MediaSources) []*pb.MediaSourceInfo {
 func item2pb(item *emby.Items) *pb.Item {
 	pi := &pb.Item{
 		Id:              item.ID,
-		Name:            item.Name,
+		Name:            episodeName(item),
 		Type:            item.Type,
 		IsFolder:        item.IsFolder,
 		ParentId:        item.ParentID,
@@ -95,6 +98,22 @@ func item2pb(item *emby.Items) *pb.Item {
 		CollectionType:  item.CollectionType,
 	}
 	return pi
+}
+
+// Prefix only episodes with real metadata. Season zero is a valid specials
+// season; a missing season must not silently turn into S00 or S01.
+func episodeName(item *emby.Items) string {
+	if item.Type != "Episode" || item.IndexNumber == nil || *item.IndexNumber < 0 {
+		return item.Name
+	}
+	prefix := fmt.Sprintf("E%02d", *item.IndexNumber)
+	if item.ParentIndexNumber != nil && *item.ParentIndexNumber >= 0 {
+		prefix = fmt.Sprintf("S%02d", *item.ParentIndexNumber) + prefix
+	}
+	if item.IndexNumberEnd != nil && *item.IndexNumberEnd > *item.IndexNumber {
+		prefix += fmt.Sprintf("-E%02d", *item.IndexNumberEnd)
+	}
+	return prefix + " · " + item.Name
 }
 
 func (a *EmbyService) GetItems(ctx context.Context, req *pb.GetItemsReq) (*pb.GetItemsResp, error) {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/synctv-org/synctv/internal/db"
@@ -61,10 +62,11 @@ func EmbyAuthorizationCacheWithUserIDInitFunc(userID, serverID string) (*EmbyUse
 }
 
 type EmbySource struct {
-	URL         string
-	Name        string
-	Subtitles   []*EmbySubtitleCache
-	IsTranscode bool
+	URL             string
+	Name            string
+	Subtitles       []*EmbySubtitleCache
+	IsTranscode     bool
+	IsCompatibility bool
 }
 
 type EmbySubtitleCache struct {
@@ -163,7 +165,7 @@ func NewEmbyMovieCacheInitFunc(
 		}
 
 		resp := &EmbyMovieCacheData{
-			Sources:            make([]EmbySource, len(data.GetMediaSourceInfo())),
+			Sources:            make([]EmbySource, 0, len(data.GetMediaSourceInfo())*3),
 			TranscodeSessionID: data.GetPlaySessionID(),
 		}
 
@@ -172,15 +174,27 @@ func NewEmbyMovieCacheInitFunc(
 			return nil, err
 		}
 
-		for i, v := range data.GetMediaSourceInfo() {
+		for _, v := range data.GetMediaSourceInfo() {
 			source, err := processMediaSource(v, movie, aucd, truePath, u)
 			if err != nil {
 				return nil, err
 			}
 
 			if source != nil {
-				resp.Sources[i] = *source
-				resp.Sources[i].Subtitles = processEmbySubtitles(v, truePath, u)
+				source.Subtitles = processEmbySubtitles(v, truePath, u, aucd.APIKey)
+				resp.Sources = append(resp.Sources, *source)
+				// Keep the existing route as default, but retain the original file
+				// for HDR passthrough and embedded subtitles/attached fonts.
+				if source.IsTranscode && v.GetContainer() != "" {
+					rawURL, err := originalEmbyURL(aucd, truePath, v)
+					if err != nil {
+						return nil, err
+					}
+					resp.Sources = append(resp.Sources, EmbySource{URL: rawURL, Name: "原画直通 · " + v.GetName(), Subtitles: source.Subtitles})
+					if compatURL, ok := h264CompatibilityURL(source.URL, v); ok {
+						resp.Sources = append(resp.Sources, EmbySource{URL: compatURL, Name: "H.264 兼容 · " + v.GetName(), IsTranscode: true, IsCompatibility: true, Subtitles: source.Subtitles})
+					}
+				}
 			}
 		}
 
@@ -275,6 +289,7 @@ func processEmbySubtitles(
 	v *emby.MediaSourceInfo,
 	truePath string,
 	u *url.URL,
+	apiKey string,
 ) []*EmbySubtitleCache {
 	subtitles := make([]*EmbySubtitleCache, 0, len(v.GetMediaStreamInfo()))
 	for _, msi := range v.GetMediaStreamInfo() {
@@ -283,6 +298,12 @@ func processEmbySubtitles(
 		}
 
 		subtutleType := "srt"
+		switch strings.ToLower(msi.GetCodec()) {
+		case "ass", "ssa":
+			subtutleType = "ass"
+		case "webvtt", "vtt":
+			subtutleType = "vtt"
+		}
 
 		result, err := url.JoinPath(
 			"emby",
@@ -297,9 +318,10 @@ func processEmbySubtitles(
 			continue
 		}
 
-		u.Path = result
-		u.RawQuery = ""
-		url := u.String()
+		subURL := *u
+		subURL.Path = result
+		subURL.RawQuery = url.Values{"api_key": {apiKey}}.Encode()
+		url := subURL.String()
 
 		name := msi.GetDisplayTitle()
 		if name == "" {

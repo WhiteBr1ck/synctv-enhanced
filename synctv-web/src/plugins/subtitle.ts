@@ -102,7 +102,8 @@ export function artplayerSubtitle(subtitles: Record<string, Subtitle>, discovery
     };
     update();
     const originalNames = Object.keys(items);
-    if (originalNames.length === 1 && !preferEmbedded) void select(originalNames[0], false);
+    const originalDefault = originalNames.find(name => /默认|default/i.test(name)) || originalNames[0];
+    if (originalDefault && !preferEmbedded) void select(originalDefault, false);
     art.on("fullscreen", update);
     art.on("destroy", () => {
       disposed = true;
@@ -128,8 +129,8 @@ export function artplayerSubtitle(subtitles: Record<string, Subtitle>, discovery
               || tracks.find(track => track.default) || tracks[0];
             const name = `内封 · ${preferred.title} · ${preferred.type.toUpperCase()} [${preferred.index}]`;
             void select(name, false);
-          } else if (!manual && preferEmbedded && !tracks.length && originalNames.length === 1) {
-            void select(originalNames[0], false);
+          } else if (!manual && preferEmbedded && !tracks.length && originalDefault) {
+            void select(originalDefault, false);
           }
           update();
         } catch (error: any) {
@@ -137,6 +138,7 @@ export function artplayerSubtitle(subtitles: Record<string, Subtitle>, discovery
             loading = false;
             update();
             art.notice.show = error.message || "内封字幕读取失败，请重新打开视频重试";
+            if (!manual && originalDefault) void select(originalDefault, false);
           }
         }
       })();

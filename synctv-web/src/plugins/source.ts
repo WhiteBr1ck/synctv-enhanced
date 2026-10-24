@@ -10,10 +10,11 @@ interface artplayPluginSource {
 
 const switchSource = (art: Artplayer, source: artplayPluginSource) => {
   const status = art.plugins["syncPlugin"].currentStatus();
-  art.once("video:canplay", () => {
+  const restore = () => {
     art.plugins["syncPlugin"].setAndNoPublishStatus(status);
     art.emit("restart", source.url);
-  });
+  };
+  art.once("video:canplay", restore);
   if (art.controls["quality"]) art.controls.remove("quality");
   if (art.setting.find("quality")) art.setting.remove("quality");
   if (art.controls["audio"]) art.controls.remove("audio");
@@ -21,16 +22,24 @@ const switchSource = (art: Artplayer, source: artplayPluginSource) => {
   destroyOldCustomPlayLib(art);
   art.option.type = source.type;
   art.url = source.url;
+  return () => art.off("video:canplay", restore);
 };
 
 export function artplayPluginSource(sources: artplayPluginSource[]) {
   return (art: Artplayer) => {
     let currentSourceName = sources.length > 0 ? sources[0].html : "";
     let currentSource = sources[0];
+    let cancelRestore: (() => unknown) | undefined;
+    let lastChange = "初始播放";
     const onSelect = (source: artplayPluginSource) => {
+      const unchanged = source.url === currentSource?.url && source.type === currentSource?.type;
       currentSource = source;
       currentSourceName = source.html;
-      switchSource(art, source);
+      if (!unchanged) {
+        cancelRestore?.();
+        lastChange = `${new Date().toLocaleTimeString()} · ${source.html}`;
+        cancelRestore = switchSource(art, source);
+      }
       return "源";
     };
     const setSelector = (newSources: artplayPluginSource[]) => {
@@ -75,10 +84,12 @@ export function artplayPluginSource(sources: artplayPluginSource[]) {
       }
     };
     setSelector(sources);
+    art.on("destroy", () => cancelRestore?.());
     return {
       name: "source",
       updateSources,
-      currentSource: () => currentSource
+      currentSource: () => currentSource,
+      lastChange: () => lastChange
     };
   };
 }

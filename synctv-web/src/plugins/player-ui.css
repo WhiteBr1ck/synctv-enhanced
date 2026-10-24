@@ -18,6 +18,8 @@
   padding: 0 7px;
 }
 .art-video-player .art-selector-list {
+  width: max-content;
+  min-width: 150px;
   max-width: min(620px, 85vw);
   max-height: 50vh;
   overflow-y: auto;
@@ -33,6 +35,19 @@
 }
 .art-video-player .art-setting-panel {
   max-width: 85vw;
+}
+.art-video-player .art-setting-panel .art-setting-item {
+  height: auto !important;
+  min-height: 35px;
+}
+.art-video-player .art-setting-panel .art-setting-item-left {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.art-video-player .art-setting-panel .art-setting-item-left-text {
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  padding: 6px 0;
 }
 .art-video-player .art-subtitle.synctv-srt,
 .art-video-player .art-subtitle.synctv-srt .art-subtitle-line,

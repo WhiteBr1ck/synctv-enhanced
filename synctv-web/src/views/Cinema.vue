@@ -582,6 +582,10 @@ const handleElementMessage = (msg: Message) => {
     case MessageType.STATUS:
     case MessageType.CHECK_STATUS:
     case MessageType.SYNC: {
+      if (msg.type === MessageType.CHECK_STATUS && player?.plugins.syncPlugin?.automaticStatus) {
+        if (player.plugins.syncPlugin.automaticStatus(msg.playbackStatus!)) ElNotification({ title: "状态不同步，同步中...", type: "warning" });
+        break;
+      }
       switch (msg.type) {
         case MessageType.CHECK_STATUS:
           ElNotification({

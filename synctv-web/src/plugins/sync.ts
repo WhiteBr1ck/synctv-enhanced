@@ -4,6 +4,7 @@ import { type WatchStopHandle } from "vue";
 import { Message, MessageType, Status } from "@/proto/message";
 import Artplayer from "artplayer";
 import { ElNotification } from "element-plus";
+import { loadSyncPreferences, shouldCorrectTime, syncPreferencesKey, syncModes, syncTolerances, syncIntervals } from "@/utils/sync-preferences";
 
 const artPlay = async (art: Artplayer) => {
   let retry = false;
@@ -39,6 +40,8 @@ interface syncPlugin {
   setAndNoPublishStatus: (status: Status, reason?: string) => void;
   currentStatus: () => Status;
   lastCorrection: () => string;
+  automaticStatus: (status: Status) => boolean;
+  automaticSettings: () => string;
 }
 
 const debounceTime = 500;
@@ -82,6 +85,18 @@ export const newSyncPlugin = (
 
     let lastestSeek = 0;
     let lastCorrection = "尚未发生同步跳转";
+    let preferences = loadSyncPreferences();
+    let statusInterval: ReturnType<typeof setInterval> | undefined;
+    let ready = false;
+    const configureChecks = () => {
+      clearInterval(statusInterval);
+      statusInterval = undefined;
+      if (ready && preferences.mode !== "off") statusInterval = setInterval(checkStatus, preferences.interval * 1000);
+    };
+    const savePreferences = () => {
+      try { localStorage.setItem(syncPreferencesKey, JSON.stringify(preferences)); } catch { /* storage unavailable */ }
+      configureChecks();
+    };
 
     const publishSeek = () => {
       console.groupCollapsed("广播视频空降");
@@ -275,9 +290,23 @@ export const newSyncPlugin = (
       };
     };
 
+    // Only CHECK_STATUS uses these local preferences. Deliberate room actions
+    // and the manual Sync button must still be applied to every participant.
+    const automaticStatus = (status: Status) => {
+      if (preferences.mode === "off") return false;
+      const seek = shouldCorrectTime(art.currentTime, status.currentTime, preferences);
+      const changed = seek || status.isPlaying !== !art.video.paused || status.playbackRate !== art.playbackRate;
+      setAndNoPublishRate(status.playbackRate);
+      if (seek) setAndNoPublishSeek(status.currentTime, "房间定时校准");
+      if (status.isPlaying) void setAndNoPublishPlay(); else setAndNoPublishPause();
+      return changed;
+    };
+    const automaticSettings = () => `${syncModes.find(mode => mode.value === preferences.mode)!.html} · 容差 ${preferences.tolerance} 秒 · 每 ${preferences.interval} 秒检查`;
+
     const intervals: number[] = [];
     const watchers: WatchStopHandle[] = [];
     art.on("destroy", () => {
+      clearInterval(statusInterval);
       intervals.forEach((interval) => {
         clearInterval(interval);
       });
@@ -299,10 +328,22 @@ export const newSyncPlugin = (
           await artPlay(art);
         }
 
-        intervals.push(setInterval(checkStatus, 10000));
+        ready = true;
+        configureChecks();
         intervals.push(setInterval(checkExpire, 10000));
 
         newSyncControl(art, publishStatus);
+        art.setting.add({ name: "sync-preferences", html: "同步设置", width: 300, selector: [
+          { html: "定时校准方式", tooltip: syncModes.find(mode => mode.value === preferences.mode)!.html,
+            selector: syncModes.map(mode => ({ ...mode, default: mode.value === preferences.mode })),
+            onSelect(item: any) { preferences.mode = item.value; savePreferences(); return item.html; } },
+          { html: "进度容差", tooltip: `${preferences.tolerance} 秒`,
+            selector: syncTolerances.map(value => ({ html: `${value} 秒`, value, default: value === preferences.tolerance })),
+            onSelect(item: any) { preferences.tolerance = item.value; savePreferences(); return item.html; } },
+          { html: "检查间隔", tooltip: `${preferences.interval} 秒`,
+            selector: syncIntervals.map(value => ({ html: `${value} 秒`, value, default: value === preferences.interval })),
+            onSelect(item: any) { preferences.interval = item.value; savePreferences(); return item.html; } }
+        ] });
 
         art.on("play", publishPlayDebounce);
 
@@ -337,7 +378,9 @@ export const newSyncPlugin = (
       setAndNoPublishRate,
       setAndNoPublishStatus,
       currentStatus,
-      lastCorrection: () => lastCorrection
+      lastCorrection: () => lastCorrection,
+      automaticStatus,
+      automaticSettings
     };
   };
 };

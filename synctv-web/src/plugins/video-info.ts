@@ -46,6 +46,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
     add("buffer", "前方缓冲");
     add("waiting", "最近缓冲等待");
     add("sync", "最近同步跳转");
+    add("syncConfig", "本机同步设置");
     add("switch", "最近换源");
     add("display", "本机 HDR 能力", "浏览器报告的显示能力；不代表当前画面正在以 HDR 输出。");
     add("decode", "本机编码支持", "代表性编码规格的基础检测；不保证当前影片的封装、级别和完整规格都兼容。");
@@ -78,6 +79,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       set("buffer", `${ahead.toFixed(1)} 秒 · readyState ${video.readyState}${quality ? ` · 丢帧 ${quality.droppedVideoFrames}/${quality.totalVideoFrames}` : ""}${video.error ? ` · 播放错误 ${video.error.code}` : ""}`);
       set("waiting", lastBuffer);
       set("sync", art.plugins?.syncPlugin?.lastCorrection?.() || "无房间同步记录");
+      set("syncConfig", art.plugins?.syncPlugin?.automaticSettings?.() || "无房间同步设置");
       set("switch", art.plugins?.source?.lastChange?.() || "初始播放");
       let hdr: boolean | undefined;
       try { hdr = window.matchMedia("(dynamic-range: high)").matches; } catch { /* unavailable */ }

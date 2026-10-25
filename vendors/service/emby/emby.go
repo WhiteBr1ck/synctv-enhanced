@@ -225,20 +225,25 @@ func (a *EmbyService) FsList(ctx context.Context, req *pb.FsListReq) (*pb.FsList
 			return nil, err
 		}
 		switch item.Type {
-		case "CollectionFolder":
+		case "CollectionFolder", "Folder", "UserRootFolder", "AggregateFolder":
 			opts = append(opts,
 				emby.WithSortBy("SortName"),
 				emby.WithSortOrderAsc(),
 				emby.WithParentID(item.ID),
-				emby.WithRecursive(),
 			)
+			// Jellyfin can omit CollectionType on a CollectionFolder lookup.
+			// Browse its immediate children in that case: an unfiltered recursive
+			// query flattens the entire library into episodes. Only recurse when
+			// an explicit library type also restricts the results to top-level media.
 			switch item.CollectionType {
 			case "movies":
 				opts = append(opts,
+					emby.WithRecursive(),
 					emby.WithIncludeItemTypes("Movie"),
 				)
 			case "tvshows":
 				opts = append(opts,
+					emby.WithRecursive(),
 					emby.WithIncludeItemTypes("Series"),
 				)
 			}

@@ -48,6 +48,83 @@ func TestFsListOmitsPlaybackSources(t *testing.T) {
 	}
 }
 
+func TestFsListPreservesLibraryHierarchy(t *testing.T) {
+	for _, tc := range []struct {
+		name, itemType, collectionType, childType, includedType string
+	}{
+		{"jellyfin library without collection type", "CollectionFolder", "", "Series", ""},
+		{"mixed library", "CollectionFolder", "mixed", "Folder", ""},
+		{"TV library", "CollectionFolder", "tvshows", "Series", "Series"},
+		{"movie library", "CollectionFolder", "movies", "Movie", "Movie"},
+		{"physical folder", "Folder", "", "Series", ""},
+		{"user root", "UserRootFolder", "", "CollectionFolder", ""},
+		{"physical root", "AggregateFolder", "", "Folder", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/emby/Users/user/Items/library":
+					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "library", "Name": "Library", "Type": tc.itemType, "CollectionType": tc.collectionType, "IsFolder": true})
+				case "/emby/Users/user/Items":
+					query := r.URL.Query()
+					if query.Get("ParentId") != "library" || query.Get("StartIndex") != "10" || query.Get("Limit") != "10" {
+						t.Error("directory scope or pagination was lost")
+					}
+					if query.Get("IncludeItemTypes") != tc.includedType {
+						t.Errorf("item type filter = %q, want %q", query.Get("IncludeItemTypes"), tc.includedType)
+					}
+					// Reproduce Jellyfin's untyped CollectionFolder response: an
+					// unfiltered recursive query returns episodes, not its series.
+					if query.Get("Recursive") == "true" && query.Get("IncludeItemTypes") == "" {
+						fmt.Fprint(w, `{"Items":[{"Id":"episode","Name":"Flattened episode","Type":"Episode"}],"TotalRecordCount":3355}`)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"Items": []any{map[string]any{"Id": "child", "Name": "Child", "Type": tc.childType, "IsFolder": tc.childType != "Movie"}}, "TotalRecordCount": 147})
+				default:
+					t.Errorf("unexpected request: %s", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+			result, err := NewEmbyService(nil).FsList(context.Background(), &pb.FsListReq{Host: server.URL, UserId: "user", Token: "test", Path: "library", StartIndex: 10, Limit: 10})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.GetTotal() != 147 || len(result.GetItems()) != 1 || result.GetItems()[0].GetType() != tc.childType {
+				t.Fatalf("library hierarchy flattened: %v", result)
+			}
+		})
+	}
+}
+
+func TestFsListSearchRemainsRecursiveAndScoped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/emby/Users/user/Items/library":
+			fmt.Fprint(w, `{"Id":"library","Name":"TV","Type":"CollectionFolder"}`)
+		case "/emby/Users/user/Items":
+			query := r.URL.Query()
+			if query.Get("Recursive") != "true" || query.Get("ParentId") != "library" || query.Get("SearchTerm") != "Title" {
+				t.Error("search must include descendants within the selected library")
+			}
+			fmt.Fprint(w, `{"Items":[{"Id":"episode","Name":"Title","Type":"Episode","IndexNumber":1,"ParentIndexNumber":1}],"TotalRecordCount":1}`)
+		default:
+			t.Errorf("unexpected request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	result, err := NewEmbyService(nil).FsList(context.Background(), &pb.FsListReq{Host: server.URL, UserId: "user", Token: "test", Path: "library", SearchTerm: "Title", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.GetItems()) != 1 || result.GetItems()[0].GetName() != "S01E01 · Title" {
+		t.Fatal("recursive episode search changed")
+	}
+}
+
 func TestEpisodeDisplayNames(t *testing.T) {
 	for _, tc := range []struct{ input, expected string }{
 		{`{"Name":"Title","Type":"Episode","IndexNumber":1,"ParentIndexNumber":1}`, "S01E01 · Title"},

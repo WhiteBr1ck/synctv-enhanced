@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { numericMetadata } from "@/utils/list-sort";
 import { useLocalStorage } from "@vueuse/core";
 import type { FileList, FileItem } from "@/types/Vendor";
 import SortSelector from "./SortSelector.vue";
@@ -19,6 +20,8 @@ const emit = defineEmits<{
 const keywords = ref("");
 const fileSort = useLocalStorage(props.metadata ? "synctv:alist-sort" : "synctv:emby-sort", "original");
 const selectedItems = ref<FileItem[]>([]);
+const creationAvailable = computed(() => props.fileList?.dateFields?.creation ?? props.fileList?.items.some(item => Number.isFinite(numericMetadata(item.created, true))));
+const modificationAvailable = computed(() => props.fileList?.dateFields?.modified ?? props.fileList?.items.some(item => Number.isFinite(numericMetadata(item.modified, true))));
 const selectItem = (item: FileItem) => {
   selectedItems.value.push(item);
 };
@@ -67,7 +70,6 @@ const toDir = (path: string, resetPage: boolean, resetKeywords: boolean) => {
   if (resetKeywords) {
     keywords.value = "";
   }
-  if (keywords.value && fileSort.value.startsWith("modified-")) fileSort.value = "name-asc";
   emit("toDir", path, currentPage.value, pageSize.value, keywords.value, fileSort.value);
 };
 
@@ -106,7 +108,7 @@ defineExpose({
       <el-button :icon="Search" :disabled="isLoading" @click="refresh(true, false)" />
     </template>
   </el-input>
-  <SortSelector label="文件排序" v-model="fileSort" @change="refresh(true, false)" :metadata="metadata" :modified-disabled="!!keywords" :disabled="isLoading" />
+  <SortSelector label="文件排序" v-model="fileSort" @change="refresh(true, false)" :metadata="metadata" timestamps :creation-disabled="!creationAvailable" :modified-disabled="!modificationAvailable" :disabled="isLoading" />
   </div>
   <p v-if="keywords && fileList?.searchScope === 'current'" class="my-1 text-xs text-gray-500">当前目录搜索</p>
   <div v-loading="!fileList || isLoading">

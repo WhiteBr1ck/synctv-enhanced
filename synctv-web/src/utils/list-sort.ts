@@ -1,5 +1,12 @@
-export interface SortItem { name: string; isDir?: boolean; type?: string; size?: number | string; modified?: number | string; created?: number | string; }
+export interface SortItem { name: string; isDir?: boolean; type?: string; size?: number | string; modified?: number | string; creation?: number | string; created?: number | string; }
 const names = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' });
+export interface DateFields { creation: boolean; modified: boolean; }
+
+function availableDates<T>(items: T[], describe: (item: T) => SortItem): DateFields {
+  const values = items.map(describe);
+  return { creation: values.some(item => Number.isFinite(numericMetadata(item.creation, true))),
+    modified: values.some(item => Number.isFinite(numericMetadata(item.modified, true))) };
+}
 
 function fileType(item: SortItem): string {
   if (item.isDir) return '';
@@ -10,8 +17,8 @@ function fileType(item: SortItem): string {
 export function numericMetadata(value: unknown, date = false): number {
   if (value === undefined || value === null || value === '') return NaN;
   const number = Number(value);
-  if (Number.isFinite(number)) return number;
-  return date && typeof value === 'string' ? Date.parse(value) : NaN;
+  const result = Number.isFinite(number) ? number : date && typeof value === 'string' ? Date.parse(value) : NaN;
+  return date && (result <= 0 || result > 8640000000000000) ? NaN : result;
 }
 
 export function compareItems(a: SortItem, b: SortItem, sort: string): number {
@@ -24,8 +31,8 @@ export function compareItems(a: SortItem, b: SortItem, sort: string): number {
     const order = names.compare(left, right);
     if (order) return order * direction;
   } else if (field !== 'name') {
-    const left = numericMetadata(a[field as 'size' | 'modified' | 'created'], field !== 'size');
-    const right = numericMetadata(b[field as 'size' | 'modified' | 'created'], field !== 'size');
+    const left = numericMetadata(a[field as 'size' | 'modified' | 'creation' | 'created'], field !== 'size');
+    const right = numericMetadata(b[field as 'size' | 'modified' | 'creation' | 'created'], field !== 'size');
     const hasLeft = Number.isFinite(left);
     const hasRight = Number.isFinite(right);
     if (hasLeft !== hasRight) return hasLeft ? -1 : 1;
@@ -40,8 +47,11 @@ export async function sortedPage<T, R extends { items: T[]; total: number }>(
   load: (page: number, max: number) => Promise<R>, page: number, max: number,
   sort: string, describe: (item: T) => SortItem,
   decorate?: (items: T[]) => Promise<void>
-): Promise<R> {
-  if (sort === 'original') return load(page, max);
+): Promise<R & { dateFields: DateFields }> {
+  if (sort === 'original') {
+    const result = await load(page, max);
+    return { ...result, dateFields: availableDates(result.items, describe) };
+  }
   const batchSize = 10000;
   const first = await load(1, batchSize);
   if (first.total > 10000) throw new Error('目录超过 10000 项，请进入子目录后排序');
@@ -53,5 +63,5 @@ export async function sortedPage<T, R extends { items: T[]; total: number }>(
   }
   if (decorate) await decorate(items);
   items.sort((a, b) => compareItems(describe(a), describe(b), sort));
-  return { ...first, items: items.slice((page - 1) * max, page * max) };
+  return { ...first, items: items.slice((page - 1) * max, page * max), dateFields: availableDates(items, describe) };
 }

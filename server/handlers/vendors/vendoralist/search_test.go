@@ -36,7 +36,7 @@ func (f *searchFixture) FsList(_ context.Context, req *alist.FsListReq) (*alist.
 func TestSearchFallbackFiltersWholeDirectoryBeforePagination(t *testing.T) {
 	f := &searchFixture{searchErr: errors.New("alist: search not available"), pages: []*alist.FsListResp{
 		{Total: 4, Content: []*alist.FsListResp_FsListContent{{Name: "Other"}, {Name: "TARGET 1"}}},
-		{Total: 4, Content: []*alist.FsListResp_FsListContent{{Name: "target 2", IsDir: true}, {Name: "Other 2"}}},
+		{Total: 4, Content: []*alist.FsListResp_FsListContent{{Name: "target 2", IsDir: true, Created: 1700000000000, Modified: 1800000000000}, {Name: "Other 2"}}},
 	}}
 	r, local, err := searchWithFallback(context.Background(), f, &alist.FsSearchReq{Parent: "/media/TV", Keywords: "Target", Page: 2, PerPage: 1})
 	if err != nil {
@@ -44,6 +44,9 @@ func TestSearchFallbackFiltersWholeDirectoryBeforePagination(t *testing.T) {
 	}
 	if !local || r.GetTotal() != 2 || len(r.GetContent()) != 1 || r.GetContent()[0].GetName() != "target 2" || r.GetContent()[0].GetParent() != "/media/TV" || !r.GetContent()[0].GetIsDir() || f.listCalls != 2 {
 		t.Fatalf("directory search or pagination broken: %v", r)
+	}
+	if r.GetContent()[0].GetCreated() != 1700000000000 || r.GetContent()[0].GetModified() != 1800000000000 {
+		t.Fatal("fallback search discarded source dates")
 	}
 }
 

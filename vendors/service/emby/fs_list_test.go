@@ -27,6 +27,9 @@ func TestFsListOmitsPlaybackSources(t *testing.T) {
 			if strings.Contains(r.URL.Query().Get("Fields"), "MediaSources") {
 				t.Error("directory requested playback sources")
 			}
+			if !strings.Contains(r.URL.Query().Get("Fields"), "DateCreated") {
+				t.Error("directory creation dates were not requested")
+			}
 			if r.URL.Query().Get("Limit") != "10000" {
 				t.Error("batch size was lost")
 			}
@@ -147,6 +150,17 @@ func TestEpisodeDisplayNames(t *testing.T) {
 		if got := item2pb(&item).GetName(); got != tc.expected {
 			t.Fatalf("got %q, expected %q", got, tc.expected)
 		}
+	}
+}
+
+func TestSourceCreationIsSeparateFromMetadataRefresh(t *testing.T) {
+	var item client.Items
+	if err := json.Unmarshal([]byte(`{"Id":"episode","Type":"Episode","Name":"Title","DateCreated":"2025-01-02T03:04:05Z","DateLastSaved":"2026-02-03T04:05:06Z"}`), &item); err != nil {
+		t.Fatal(err)
+	}
+	result := item2pb(&item)
+	if result.GetCreated() != 1735787045000 || result.GetModified() != 0 {
+		t.Fatal("source creation was lost or metadata refresh was used as file modification")
 	}
 }
 

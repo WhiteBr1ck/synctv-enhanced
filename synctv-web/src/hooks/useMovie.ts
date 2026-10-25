@@ -51,7 +51,6 @@ export const useMovieApi = (token: string, roomId: string) => {
     const folderSubPath = subPath === undefined ? (id === undefined ? room.lastFolderSubPath : '') : subPath;
     keyword=keyword===undefined?room.browserKeyword:keyword;
     sorting.value = true;
-    if (keyword && movieSort.value.startsWith("modified-")) movieSort.value = "name-asc";
     try {
       const load = async (page: number, max: number) => {
         await reqMoviesApi({
@@ -74,17 +73,19 @@ export const useMovieApi = (token: string, roomId: string) => {
       };
       const result = await sortedPage(load, currentPage.value, pageSize.value, movieSort.value,
         (item: MovieInfo) => ({ name: item.base.name, isDir: item.base.isFolder, type: item.base.type, size: item.base.fileSize,
-          modified: item.base.modifiedAt, created: item.createAt }));
+          modified: item.base.modifiedAt, creation: item.base.fileCreatedAt, created: item.createAt }));
       if (generation !== listingGeneration) return;
-      if (/^(size|modified)-/.test(movieSort.value) && !result.items.some(item => item.base.vendorInfo?.vendor === 'alist')) {
+      if (movieSort.value.startsWith('size-') && !result.items.some(item => item.base.vendorInfo?.vendor === 'alist')) {
         movieSort.value = 'name-asc';
       }
       if (result.dynamic && movieSort.value.startsWith('created-')) movieSort.value = 'name-asc';
+      if (!result.dynamic && /^(creation|modified|size)-/.test(movieSort.value)) movieSort.value = 'name-asc';
       room.movies = result.items;
       room.totalMovies = result.total;
       room.folder = result.paths;
       dynamic.value = result.dynamic || false;
       room.browserSearchScope = result.searchScope || '';
+      room.browserDateFields = result.dateFields;
     } catch (err: any) {
       if (generation !== listingGeneration) return;
       if(id===undefined&&folderId&&[400,403,404].includes(err.response?.status)){

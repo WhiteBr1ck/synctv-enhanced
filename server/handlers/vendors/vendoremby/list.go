@@ -32,7 +32,9 @@ func (r *ListReq) Decode(ctx *gin.Context) error {
 
 type EmbyFileItem struct {
 	*model.Item
-	Type string `json:"type"`
+	Type     string `json:"type"`
+	Created  uint64 `json:"created,omitempty"`
+	Modified uint64 `json:"modified,omitempty"`
 }
 
 type EmbyFSListResp = model.VendorFSListResp[*EmbyFileItem]
@@ -193,7 +195,9 @@ EmbyFSListResp:
 				Path:  fmt.Sprintf("%s/%s", aucd.ServerID, i.GetId()),
 				IsDir: i.GetIsFolder(),
 			},
-			Type: i.GetType(),
+			Type:     i.GetType(),
+			Created:  i.GetCreated(),
+			Modified: i.GetModified(),
 		})
 	}
 

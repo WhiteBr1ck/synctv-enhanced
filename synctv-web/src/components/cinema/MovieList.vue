@@ -138,7 +138,7 @@ const fileMetadataSortAvailable = computed(() => dynamic.value && room.movies.so
           @keyup.enter="handleSearch"
         />
         <button class="btn" @click="handleSearch">搜索</button>
-        <SortSelector label="影片排序" v-model="movieSort" @change="changeSort" :metadata="fileMetadataSortAvailable" :added="!dynamic" :modified-disabled="!!searchKeyword" :disabled="moviesLoading" />
+        <SortSelector label="影片排序" v-model="movieSort" @change="changeSort" :metadata="fileMetadataSortAvailable" :timestamps="dynamic" :added="!dynamic" :creation-disabled="!room.browserDateFields.creation" :modified-disabled="!room.browserDateFields.modified" :disabled="moviesLoading" />
       </div>
 
 
@@ -185,7 +185,8 @@ const fileMetadataSortAvailable = computed(() => dynamic.value && room.movies.so
           </b>
           <small class="truncate">{{ item.base!.url || item.id }}</small>
           <small v-if="item.base!.type" class="ml-2 text-gray-500">[{{ item.base!.type }}]</small>
-          <small v-if="item.base.modifiedAt != null || item.base.fileSize != null" class="block text-gray-500">
+          <small v-if="item.base.fileCreatedAt || item.base.modifiedAt || item.base.fileSize != null" class="block text-gray-500">
+            <span v-if="item.base.fileCreatedAt" class="mr-2">创建于 {{ new Date(item.base.fileCreatedAt).toLocaleString() }}</span>
             <span v-if="item.base.modifiedAt != null">修改于 {{ new Date(item.base.modifiedAt).toLocaleString() }}</span>
             <span v-if="item.base.fileSize != null && !item.base.isFolder" class="ml-2">{{ (item.base.fileSize / 1024 / 1024).toFixed(1) }} MB</span>
           </small>

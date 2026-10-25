@@ -5,6 +5,8 @@ const props = defineProps<{
   modelValue: string;
   label: string;
   metadata?: boolean;
+  timestamps?: boolean;
+  creationDisabled?: boolean;
   added?: boolean;
   modifiedDisabled?: boolean;
   disabled?: boolean;
@@ -32,7 +34,8 @@ const changeDirection = () => update(`${field.value}-${direction.value === 'asc'
     <select :aria-label="label" :value="field" @change="changeField" :disabled="disabled" class="l-input m-0 p-2 min-w-0">
       <option value="original">默认顺序</option>
       <option value="name">名称</option>
-      <option value="modified" v-if="metadata" :disabled="modifiedDisabled">修改时间</option>
+      <option value="creation" v-if="metadata || timestamps" :disabled="creationDisabled" :title="creationDisabled ? '当前来源未提供创建时间' : '来源提供的创建时间'">创建时间{{ creationDisabled ? '（无数据）' : '' }}</option>
+      <option value="modified" v-if="metadata || timestamps" :disabled="modifiedDisabled" :title="modifiedDisabled ? '当前来源未提供修改时间' : '来源提供的修改时间'">修改时间{{ modifiedDisabled ? '（无数据）' : '' }}</option>
       <option value="type">类型</option>
       <option value="size" v-if="metadata">大小</option>
       <option value="created" v-if="added">添加时间</option>

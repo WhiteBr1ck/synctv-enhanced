@@ -113,10 +113,12 @@ func (s *EmbyVendorService) ListDynamicMovie(
 			CreatorID: s.movie.CreatorID,
 			SubPath:   flr.GetId(),
 			Base: dbModel.MovieBase{
-				Name:     flr.GetName(),
-				Type:     flr.GetType(),
-				IsFolder: flr.GetIsFolder(),
-				ParentID: dbModel.EmptyNullString(s.movie.ID),
+				FileCreatedAt: flr.GetCreated(),
+				ModifiedAt:    flr.GetModified(),
+				Name:          flr.GetName(),
+				Type:          flr.GetType(),
+				IsFolder:      flr.GetIsFolder(),
+				ParentID:      dbModel.EmptyNullString(s.movie.ID),
 				VendorInfo: dbModel.VendorInfo{
 					Vendor:  dbModel.VendorEmby,
 					Backend: s.movie.VendorInfo.Backend,

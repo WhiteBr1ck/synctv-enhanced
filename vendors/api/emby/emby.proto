@@ -146,6 +146,8 @@ message Item {
   bool isFolder = 9;
   repeated MediaSourceInfo mediaSourceInfo = 10;
   string collectionType = 11;
+  uint64 created = 12; // Unix milliseconds; zero means unavailable.
+  uint64 modified = 13;
 }
 
 message GetItemsResp {

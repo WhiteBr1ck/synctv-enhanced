@@ -37,6 +37,7 @@ type AlistFileItem struct {
 	*model.Item
 	Size     uint64 `json:"size"`
 	Modified uint64 `json:"modified,omitempty"`
+	Created  uint64 `json:"created,omitempty"`
 }
 
 type AlistFSListResp = model.VendorFSListResp[*AlistFileItem]
@@ -189,7 +190,9 @@ AlistFSListResp:
 					),
 					IsDir: flr.GetIsDir(),
 				},
-				Size: flr.GetSize(),
+				Size:     flr.GetSize(),
+				Created:  flr.GetCreated(),
+				Modified: flr.GetModified(),
 			})
 		}
 
@@ -239,6 +242,7 @@ AlistFSListResp:
 			},
 			Size:     flr.GetSize(),
 			Modified: flr.GetModified(),
+			Created:  flr.GetCreated(),
 		})
 	}
 

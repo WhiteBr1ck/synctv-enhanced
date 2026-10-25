@@ -7,7 +7,7 @@
 - Jellyfin/Emby 集数显示 `S01E01 · 标题`，名称排序按集数自然排列；支持特别篇和合并集。
 - 播放器齿轮菜单可调字幕大小（50%–200%）、位置与 SRT 颜色，本机记住选择；ASS 保留原脚本样式与颜色，100% 恢复原始大小。
 - ASS 在全屏尺寸变化后重新绘制，切集重新加载字幕并沿用语言选择。字幕与音轨统一显示来源、语言、格式和名称。
-- 搜索与排序放在同一行，名称、修改时间、类型、大小由一个菜单选择，左侧箭头切换升降序；文件夹优先、数字自然排序、记住选择。
+- 搜索与排序放在同一行，名称、创建时间、修改时间、类型、大小由一个菜单选择，左侧箭头切换升降序；文件夹优先、数字自然排序、记住选择。
 - 完整目录先排序再分页（最多 10000 项）；普通房间列表另有添加时间排序。
 - Jellyfin/Emby 目录一次读取后排序，避免为一个大型媒体库连续请求几十页。
 - 聊天消息按房间保存在服务器，保留最近 500 条，退出、换设备或容器重启后自动恢复。
@@ -31,11 +31,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.11` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.12` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.11
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.11
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.12
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.12
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
@@ -55,8 +55,9 @@ Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
 
 ## 支持范围
 
-- 大小与修改时间适用于 AList/OpenList 目录。搜索接口没有日期，搜索时日期排序会切回名称。
-- Emby/Jellyfin 目录提供名称和类型排序。
+- 时间排序使用来源实际返回的创建与修改时间，和普通房间的添加时间分开；未提供的时间显示“无数据”并禁用，部分条目缺少日期时排在有效日期之后。
+- AList/OpenList 目录及当前目录搜索保留创建时间与修改时间；索引搜索的时间字段取决于上游。
+- Emby/Jellyfin 目录提供名称、类型及来源创建时间排序；Jellyfin 标准目录接口没有返回文件修改时间时，该项显示“无数据”。创建时间沿用媒体服务器的 DateCreated 定义。
 - AList 上游未提供索引搜索时，自动搜索当前目录（最多 10000 项），界面显示搜索范围；不会递归扫描整个网盘。
 - Jellyfin/Emby 返回 ASS/SSA 时直接请求 ASS，避免经过 SRT 丢失样式；原文件可读取时自动提取内封字幕和附件字体。
 - PGS/VobSub 图片字幕不在本版文字字幕范围内；AList/OpenList 与普通直链暂不提供视频转码。

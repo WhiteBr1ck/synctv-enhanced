@@ -70,6 +70,7 @@ type fsListResp struct {
 	Provider string `json:"provider"`
 	Content  []struct {
 		Modified time.Time `json:"modified"`
+		Created  time.Time `json:"created"`
 		Name     string    `json:"name"`
 		Sign     string    `json:"sign"`
 		Thumb    string    `json:"thumb"`
@@ -166,11 +167,13 @@ type FsSearchReq struct {
 
 type fsSearchResp struct {
 	Content []struct {
-		Parent string `json:"parent"`
-		Name   string `json:"name"`
-		IsDir  bool   `json:"is_dir"`
-		Size   uint64 `json:"size"`
-		Type   uint64 `json:"type"`
+		Created  time.Time `json:"created"`
+		Modified time.Time `json:"modified"`
+		Parent   string    `json:"parent"`
+		Name     string    `json:"name"`
+		IsDir    bool      `json:"is_dir"`
+		Size     uint64    `json:"size"`
+		Type     uint64    `json:"type"`
 	} `json:"content"`
 	Total uint64 `json:"total"`
 }

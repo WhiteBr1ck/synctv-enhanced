@@ -48,6 +48,7 @@ export interface BaseMovieInfo {
   preferEmbeddedSubtitles?: boolean;
   fileSize?: number;
   modifiedAt?: number;
+  fileCreatedAt?: number;
   danmu?: string;
   streamDanmu?: string;
   isFolder?: boolean;

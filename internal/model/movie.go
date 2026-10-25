@@ -71,24 +71,25 @@ type MoreSource struct {
 }
 
 type MovieBase struct {
-	PlaybackMode string               `gorm:"-" json:"playbackMode,omitempty"`
-	VideoRange   string               `gorm:"-" json:"videoRange,omitempty"`
-	FileSize     uint64               `gorm:"-" json:"fileSize,omitempty"`
-	ModifiedAt   uint64               `gorm:"-" json:"modifiedAt,omitempty"`
-	VendorInfo   VendorInfo           `gorm:"embedded;embeddedPrefix:vendor_info_" json:"vendorInfo,omitempty"`
-	Headers      map[string]string    `gorm:"serializer:fastjson;type:text"        json:"headers,omitempty"`
-	Subtitles    map[string]*Subtitle `gorm:"serializer:fastjson;type:text"        json:"subtitles,omitempty"`
-	URL          string               `gorm:"type:text"                            json:"url"`
-	Name         string               `gorm:"not null;type:text"                   json:"name"`
-	Type         string               `                                            json:"type"`
-	ParentID     EmptyNullString      `gorm:"type:char(32)"                        json:"parentId"`
-	MoreSources  []*MoreSource        `gorm:"serializer:fastjson;type:text"        json:"moreSources,omitempty"`
-	Danmu        string               `gorm:"type:text"                            json:"danmu"`
-	StreamDanmu  string               `gorm:"type:text"                            json:"streamDanmu"`
-	Live         bool                 `                                            json:"live"`
-	Proxy        bool                 `                                            json:"proxy"`
-	RtmpSource   bool                 `                                            json:"rtmpSource"`
-	IsFolder     bool                 `                                            json:"isFolder"`
+	PlaybackMode  string               `gorm:"-" json:"playbackMode,omitempty"`
+	VideoRange    string               `gorm:"-" json:"videoRange,omitempty"`
+	FileSize      uint64               `gorm:"-" json:"fileSize,omitempty"`
+	ModifiedAt    uint64               `gorm:"-" json:"modifiedAt,omitempty"`
+	FileCreatedAt uint64               `gorm:"-" json:"fileCreatedAt,omitempty"`
+	VendorInfo    VendorInfo           `gorm:"embedded;embeddedPrefix:vendor_info_" json:"vendorInfo,omitempty"`
+	Headers       map[string]string    `gorm:"serializer:fastjson;type:text"        json:"headers,omitempty"`
+	Subtitles     map[string]*Subtitle `gorm:"serializer:fastjson;type:text"        json:"subtitles,omitempty"`
+	URL           string               `gorm:"type:text"                            json:"url"`
+	Name          string               `gorm:"not null;type:text"                   json:"name"`
+	Type          string               `                                            json:"type"`
+	ParentID      EmptyNullString      `gorm:"type:char(32)"                        json:"parentId"`
+	MoreSources   []*MoreSource        `gorm:"serializer:fastjson;type:text"        json:"moreSources,omitempty"`
+	Danmu         string               `gorm:"type:text"                            json:"danmu"`
+	StreamDanmu   string               `gorm:"type:text"                            json:"streamDanmu"`
+	Live          bool                 `                                            json:"live"`
+	Proxy         bool                 `                                            json:"proxy"`
+	RtmpSource    bool                 `                                            json:"rtmpSource"`
+	IsFolder      bool                 `                                            json:"isFolder"`
 }
 
 func (m *MovieBase) IsM3u8() bool {

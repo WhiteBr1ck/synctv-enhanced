@@ -5,6 +5,7 @@ import (
 
 	pb "github.com/synctv-org/vendors/api/alist"
 	"github.com/synctv-org/vendors/conf"
+	"github.com/synctv-org/vendors/utils"
 	"github.com/synctv-org/vendors/vendors/alist"
 )
 
@@ -127,7 +128,8 @@ func (a *AlistService) FsList(ctx context.Context, req *pb.FsListReq) (*pb.FsLis
 			Name:     v.Name,
 			Size:     v.Size,
 			IsDir:    v.IsDir,
-			Modified: uint64(v.Modified.UnixMilli()),
+			Modified: utils.UnixMillis(v.Modified),
+			Created:  utils.UnixMillis(v.Created),
 			Sign:     v.Sign,
 			Thumb:    v.Thumb,
 			Type:     v.Type,
@@ -213,11 +215,13 @@ func (a *AlistService) FsSearch(ctx context.Context, req *pb.FsSearchReq) (*pb.F
 	content := make([]*pb.FsSearchResp_FsSearchContent, len(r.Content))
 	for i, v := range r.Content {
 		content[i] = &pb.FsSearchResp_FsSearchContent{
-			Parent: v.Parent,
-			Name:   v.Name,
-			Size:   v.Size,
-			IsDir:  v.IsDir,
-			Type:   v.Type,
+			Created:  utils.UnixMillis(v.Created),
+			Modified: utils.UnixMillis(v.Modified),
+			Parent:   v.Parent,
+			Name:     v.Name,
+			Size:     v.Size,
+			IsDir:    v.IsDir,
+			Type:     v.Type,
 		}
 	}
 	return &pb.FsSearchResp{

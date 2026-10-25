@@ -41,6 +41,7 @@ export interface FileItem {
   isProxy?: boolean;
   size?: number;
   modified?: number;
+  created?: number;
 }
 
 export interface FileListPath {
@@ -49,6 +50,7 @@ export interface FileListPath {
 }
 
 export interface FileList {
+  dateFields?: { creation: boolean; modified: boolean; };
   searchScope?: 'current';
   paths: FileListPath[];
   items: FileItem[];

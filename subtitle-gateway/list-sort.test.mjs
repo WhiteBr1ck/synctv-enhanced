@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sortedPage, compareItems } from '../synctv-web/src/utils/list-sort.ts';
+import { sortedPage, compareItems, numericMetadata } from '../synctv-web/src/utils/list-sort.ts';
 
 test('natural sorting preserves folder priority and numeric episode order', () => {
   const items = [{name:'E10'}, {name:'E2'}, {name:'Z',isDir:true}, {name:'E1'}];
@@ -54,4 +54,26 @@ test('AList ISO timestamps and numeric strings sort using their actual values', 
     {name:'TV',modified:'2026-08-09T04:15:44+08:00',size:'20'}];
   assert.deepEqual(items.toSorted((a,b)=>compareItems(a,b,'modified-asc')).map(x=>x.name),['TV','Movie','Anime']);
   assert.deepEqual(items.toSorted((a,b)=>compareItems(a,b,'size-desc')).map(x=>x.name),['Movie','TV','Anime']);
+});
+
+test('source creation, source modification and room addition remain distinct sorts', () => {
+  const items = [{name:'A',creation:3000,modified:1000,created:2000},{name:'B',creation:1000,modified:3000,created:1000},{name:'C',creation:2000,modified:2000,created:3000}];
+  assert.deepEqual(items.toSorted((a,b)=>compareItems(a,b,'creation-asc')).map(x=>x.name),['B','C','A']);
+  assert.deepEqual(items.toSorted((a,b)=>compareItems(a,b,'creation-desc')).map(x=>x.name),['A','C','B']);
+  assert.deepEqual(items.toSorted((a,b)=>compareItems(a,b,'modified-desc')).map(x=>x.name),['B','C','A']);
+  assert.deepEqual(items.toSorted((a,b)=>compareItems(a,b,'created-desc')).map(x=>x.name),['C','A','B']);
+});
+
+test('unknown dates stay last and never become fake dates', () => {
+  for (const value of [undefined,0,'0001-01-01T00:00:00Z','18446744073709551615']) assert.ok(Number.isNaN(numericMetadata(value,true)));
+  assert.equal(numericMetadata(0),0);
+  const items=[{name:'Unknown',creation:0},{name:'Known',creation:'2025-01-01T00:00:00Z'}];
+  for(const sort of ['creation-asc','creation-desc']) assert.equal(items.toSorted((a,b)=>compareItems(a,b,sort))[0].name,'Known');
+});
+
+test('date availability survives pagination into entries without dates', async () => {
+  const rows=[{name:'A',creation:1700000000000,modified:1800000000000},{name:'B'}];
+  const result=await sortedPage(async()=>({items:rows,total:2}),2,1,'creation-desc',item=>item);
+  assert.equal(result.items[0].name,'B');
+  assert.deepEqual(result.dateFields,{creation:true,modified:true});
 });

@@ -6,6 +6,7 @@ import (
 
 	pb "github.com/synctv-org/vendors/api/emby"
 	"github.com/synctv-org/vendors/conf"
+	"github.com/synctv-org/vendors/utils"
 	"github.com/synctv-org/vendors/vendors/emby"
 )
 
@@ -97,6 +98,8 @@ func item2pb(item *emby.Items) *pb.Item {
 		SeriesId:        item.SeriesID,
 		MediaSourceInfo: mediaSources2pb(item.MediaSources),
 		CollectionType:  item.CollectionType,
+		Created:         utils.UnixMillis(item.DateCreated),
+		Modified:        utils.UnixMillis(item.DateModified),
 	}
 	return pi
 }
@@ -161,7 +164,7 @@ func (a *EmbyService) FsList(ctx context.Context, req *pb.FsListReq) (*pb.FsList
 	cli := emby.NewClient(req.GetHost(), emby.WithContext(ctx), emby.WithKey(req.GetToken()), emby.WithUserID(req.GetUserId()))
 	// Directory requests need hierarchy, not every episode's playback metadata.
 	listingFields := func(query map[string]string) {
-		query["Fields"] = "ParentId,Container"
+		query["Fields"] = "ParentId,Container,DateCreated"
 		query["EnableImages"] = "false"
 		query["EnableUserData"] = "false"
 	}

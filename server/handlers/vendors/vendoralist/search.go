@@ -36,7 +36,7 @@ func searchWithFallback(ctx context.Context, cli alistSearchClient, req *alist.F
 		}
 		for _, item := range listing.GetContent() {
 			if strings.Contains(strings.ToLower(item.GetName()), keyword) {
-				matches = append(matches, &alist.FsSearchResp_FsSearchContent{Parent: req.GetParent(), Name: item.GetName(), IsDir: item.GetIsDir(), Size: item.GetSize(), Type: item.GetType()})
+				matches = append(matches, &alist.FsSearchResp_FsSearchContent{Parent: req.GetParent(), Name: item.GetName(), IsDir: item.GetIsDir(), Size: item.GetSize(), Type: item.GetType(), Created: item.GetCreated(), Modified: item.GetModified()})
 			}
 		}
 		if received >= listing.GetTotal() {

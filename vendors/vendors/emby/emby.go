@@ -295,6 +295,7 @@ type Chapters struct {
 
 type Items struct {
 	DateCreated          time.Time        `json:"DateCreated"`
+	DateModified         time.Time        `json:"DateModified"`
 	PremiereDate         time.Time        `json:"PremiereDate"`
 	ImageTags            ImageTags        `json:"ImageTags"`
 	SeasonName           string           `json:"SeasonName"`

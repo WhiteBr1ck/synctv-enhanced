@@ -40,7 +40,7 @@ jobs:
       - name: Test chat persistence and directory request limits
         run: |
           go test ./internal/db ./utils ./internal/cache ./server/handlers/vendors/vendoremby ./server/handlers/vendors/vendoralist
-          (cd vendors && go test ./service/emby)
+          (cd vendors && go test ./service/emby ./service/alist ./utils)
   images:
     needs: checks
     runs-on: ubuntu-latest

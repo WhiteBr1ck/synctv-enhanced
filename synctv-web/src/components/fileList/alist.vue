@@ -62,7 +62,7 @@ const getFileList = async (path: string, page: number, max: number, keyword?: st
       if (!state.value) throw new Error("没有收到文件列表");
       return state.value;
     };
-    const result = await sortedPage(load, page, max, sort || localStorage.getItem("synctv:alist-sort") || "original", (item: FileItem) => item);
+    const result = await sortedPage(load, page, max, sort || localStorage.getItem("synctv:alist-sort") || "original", (item: FileItem) => ({...item, creation: item.created}));
     if (generation === listingGeneration) state.value = result;
   } catch (err: any) {
     if (generation !== listingGeneration) return;

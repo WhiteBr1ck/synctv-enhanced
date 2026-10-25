@@ -48,6 +48,28 @@ func (c *Client) GetItem(id string) (*Items, error) {
 
 type QueryFunc func(map[string]string)
 
+// Ancestors uses the user's virtual library hierarchy rather than walking the
+// physical ParentId chain, which can contain a second copy of the same library.
+func (c *Client) Ancestors(id string) ([]*Items, error) {
+	req, err := c.NewRequest(http.MethodGet, "/emby/Items/"+id+"/Ancestors", nil, map[string]string{"UserId": c.userID})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ancestor lookup: status code %d", resp.StatusCode)
+	}
+	var ancestors []*Items
+	if err := json.NewDecoder(resp.Body).Decode(&ancestors); err != nil {
+		return nil, err
+	}
+	return ancestors, nil
+}
+
 func WithStartIndex(startIndex uint64) QueryFunc {
 	return func(o map[string]string) {
 		o["StartIndex"] = strconv.FormatUint(startIndex, 10)

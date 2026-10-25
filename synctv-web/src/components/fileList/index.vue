@@ -108,6 +108,7 @@ defineExpose({
   </el-input>
   <SortSelector label="文件排序" v-model="fileSort" @change="refresh(true, false)" :metadata="metadata" :modified-disabled="!!keywords" :disabled="isLoading" />
   </div>
+  <p v-if="keywords && fileList?.searchScope === 'current'" class="my-1 text-xs text-gray-500">当前目录搜索</p>
   <div v-loading="!fileList || isLoading">
     <div class="flex px-1 py-1">
       <p class="mr-auto">名称</p>

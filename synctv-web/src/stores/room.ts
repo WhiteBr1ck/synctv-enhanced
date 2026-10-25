@@ -57,6 +57,7 @@ export const roomStore = defineStore("roomStore", () => {
   const viewerCount = ref(1);
 
   const folder = ref<MoviePath[]>();
+  const browserSearchScope = ref<'current' | ''>('');
   const browserPage=ref(1),browserPageSize=ref(10),browserKeyword=ref(''),browserDynamic=ref(false);
   const browserStates=useLocalStorage<Record<string,{folder:MoviePath[];page:number;size:number;keyword:string}>>('synctv:room-browsers',{});
   let browserRoom='';
@@ -69,6 +70,7 @@ export const roomStore = defineStore("roomStore", () => {
     browserPageSize.value=[10,20,30,40,50,100].includes(saved?.size)?saved.size:10;
     browserKeyword.value=typeof saved?.keyword==='string'?saved.keyword:'';
     browserDynamic.value=false;
+    browserSearchScope.value='';
   };
   watch([folder,browserPage,browserPageSize,browserKeyword],()=>{
     if(browserRoom&&folder.value)browserStates.value[browserRoom]={folder:folder.value,page:browserPage.value,size:browserPageSize.value,keyword:browserKeyword.value};
@@ -96,7 +98,7 @@ export const roomStore = defineStore("roomStore", () => {
     myInfo,
     roomID,
     folder,
-    restoreBrowser,browserPage,browserPageSize,browserKeyword,browserDynamic,
+    restoreBrowser,browserPage,browserPageSize,browserKeyword,browserDynamic,browserSearchScope,
     lastFolderId,
     lastFolderSubPath
   };

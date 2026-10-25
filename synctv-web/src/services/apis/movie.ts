@@ -29,6 +29,7 @@ export const moviesApi = useDefineApi<
     paths: MoviePath[];
     total: number;
     dynamic: boolean;
+    searchScope?: 'current';
   }
 >({
   url: "/api/room/movie/movies",

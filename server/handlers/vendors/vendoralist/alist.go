@@ -83,7 +83,7 @@ func (s *AlistVendorService) ListDynamicMovie(
 
 	cli := s.Client()
 	if keyword != "" {
-		data, err := cli.FsSearch(ctx, &alist.FsSearchReq{
+		data, localSearch, err := searchWithFallback(ctx, cli, &alist.FsSearchReq{
 			Token:    aucd.Token,
 			Password: s.movie.VendorInfo.Alist.Password,
 			Parent:   newPath,
@@ -97,19 +97,22 @@ func (s *AlistVendorService) ListDynamicMovie(
 		}
 
 		resp.Total = int64(data.GetTotal())
+		if localSearch {
+			resp.SearchScope = "current"
+		}
 
 		resp.Movies = make([]*model.Movie, len(data.GetContent()))
 		for i, flr := range data.GetContent() {
-			fileSubPath := strings.TrimPrefix(strings.Trim(flr.GetParent(), "/"), truePath)
+			fileSubPath, err := searchResultSubPath(truePath, flr.GetParent(), flr.GetName())
+			if err != nil {
+				return nil, err
+			}
 			resp.Movies[i] = &model.Movie{
 				ID:        s.movie.ID,
 				CreatedAt: s.movie.CreatedAt.UnixMilli(),
 				Creator:   op.GetUserName(s.movie.CreatorID),
 				CreatorID: s.movie.CreatorID,
-				SubPath: "/" + strings.Trim(
-					fmt.Sprintf("%s/%s", fileSubPath, flr.GetName()),
-					"/",
-				),
+				SubPath:   fileSubPath,
 				Base: dbModel.MovieBase{
 					FileSize: flr.GetSize(),
 					Name:     flr.GetName(),

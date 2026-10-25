@@ -104,6 +104,7 @@ const handleSwitchDir = async (id: string, subPath?: string) => {
 
 // 处理搜索
 const handleSearch = () => {
+  currentPage.value = 1;
   getMovies(undefined, undefined, searchKeyword.value);
 }
 const changeSort = () => {
@@ -116,7 +117,7 @@ const fileMetadataSortAvailable = computed(() => dynamic.value && room.movies.so
 
 <template>
   <div class="card">
-    <div class="card-title">影片列表（{{ room.totalMovies }}）</div>
+    <div class="card-title">影片列表（{{ room.totalMovies }}）<small v-if="searchKeyword && room.browserSearchScope === 'current'" class="ml-2 font-normal text-xs text-gray-500">当前目录搜索</small></div>
 
     <div class="card-body">
       <el-breadcrumb :separator-icon="ArrowRight">
@@ -238,9 +239,6 @@ const fileMetadataSortAvailable = computed(() => dynamic.value && room.movies.so
             @click="handleSwitchDir(item['id'], item.subPath)"
           >
             进入
-            <el-icon width="18px">
-              <FolderOpened />
-            </el-icon>
             <FolderOpened class="inline-block" width="18px" />
           </button>
 

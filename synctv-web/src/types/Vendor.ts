@@ -49,6 +49,7 @@ export interface FileListPath {
 }
 
 export interface FileList {
+  searchScope?: 'current';
   paths: FileListPath[];
   items: FileItem[];
   total: number;

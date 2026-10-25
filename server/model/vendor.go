@@ -15,9 +15,10 @@ type VendorMeResp[T any] struct {
 }
 
 type VendorFSListResp[T any] struct {
-	Paths []*Path `json:"paths"`
-	Items []T     `json:"items"`
-	Total uint64  `json:"total"`
+	Paths       []*Path `json:"paths"`
+	Items       []T     `json:"items"`
+	Total       uint64  `json:"total"`
+	SearchScope string  `json:"searchScope,omitempty"`
 }
 
 func GenDefaultPaths(path string, skipEmpty bool, paths ...*Path) []*Path {

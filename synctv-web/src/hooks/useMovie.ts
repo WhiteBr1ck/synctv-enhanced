@@ -84,6 +84,7 @@ export const useMovieApi = (token: string, roomId: string) => {
       room.totalMovies = result.total;
       room.folder = result.paths;
       dynamic.value = result.dynamic || false;
+      room.browserSearchScope = result.searchScope || '';
     } catch (err: any) {
       if (generation !== listingGeneration) return;
       if(id===undefined&&folderId&&[400,403,404].includes(err.response?.status)){

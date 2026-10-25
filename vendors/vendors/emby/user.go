@@ -116,7 +116,7 @@ func (c *Client) UserViews(opt ...QueryFunc) (*ItemsResp, error) {
 	for _, f := range opt {
 		f(o)
 	}
-	req, err := c.NewRequest(http.MethodGet, fmt.Sprintf("/emby/Users/%s/Views", c.userID), o)
+	req, err := c.NewRequest(http.MethodGet, fmt.Sprintf("/emby/Users/%s/Views", c.userID), nil, o)
 	if err != nil {
 		return nil, err
 	}
@@ -206,11 +206,11 @@ func (c *Client) Seasons(id string, opt ...QueryFunc) (*ItemsResp, error) {
 	if c.userID == "" {
 		return nil, errors.New("user id not set")
 	}
-	o := map[string]string{}
+	o := map[string]string{"UserId": c.userID}
 	for _, f := range opt {
 		f(o)
 	}
-	req, err := c.NewRequest(http.MethodGet, fmt.Sprintf("/emby/Shows/%s/Seasons", id), o)
+	req, err := c.NewRequest(http.MethodGet, fmt.Sprintf("/emby/Shows/%s/Seasons", id), nil, o)
 	if err != nil {
 		return nil, err
 	}

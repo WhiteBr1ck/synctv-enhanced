@@ -147,7 +147,7 @@ AlistFSListResp:
 
 	cli := vendor.LoadAlistClient(ctx.Query("backend"))
 	if req.Keyword != "" {
-		data, err := cli.FsSearch(ctx, &alist.FsSearchReq{
+		data, localSearch, err := searchWithFallback(ctx, cli, &alist.FsSearchReq{
 			Token:    aucd.Token,
 			Password: req.Password,
 			Parent:   req.Path,
@@ -174,6 +174,9 @@ AlistFSListResp:
 					Name: aucd.Host,
 					Path: aucd.ServerID + "/",
 				}),
+		}
+		if localSearch {
+			resp.SearchScope = "current"
 		}
 		for _, flr := range data.GetContent() {
 			resp.Items = append(resp.Items, &AlistFileItem{

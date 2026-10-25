@@ -18,6 +18,8 @@ func TestFsListOmitsPlaybackSources(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/emby/Items/library/Ancestors":
+			fmt.Fprint(w, `[]`)
 		case "/emby/Users/user/Items/library":
 			fmt.Fprint(w, `{"Id":"library","Name":"TV","Type":"CollectionFolder","CollectionType":"tvshows","IsFolder":true}`)
 		case "/emby/Users/user/Items":
@@ -64,6 +66,8 @@ func TestFsListPreservesLibraryHierarchy(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
+				case "/emby/Items/library/Ancestors":
+					fmt.Fprint(w, `[]`)
 				case "/emby/Users/user/Items/library":
 					_ = json.NewEncoder(w).Encode(map[string]any{"Id": "library", "Name": "Library", "Type": tc.itemType, "CollectionType": tc.collectionType, "IsFolder": true})
 				case "/emby/Users/user/Items":
@@ -102,6 +106,8 @@ func TestFsListSearchRemainsRecursiveAndScoped(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/emby/Items/library/Ancestors":
+			fmt.Fprint(w, `[]`)
 		case "/emby/Users/user/Items/library":
 			fmt.Fprint(w, `{"Id":"library","Name":"TV","Type":"CollectionFolder"}`)
 		case "/emby/Users/user/Items":
@@ -145,28 +151,32 @@ func TestEpisodeDisplayNames(t *testing.T) {
 }
 
 func TestFsListKeepsCompleteBreadcrumbs(t *testing.T) {
+	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/emby/Users/user/Items/season":
 			fmt.Fprint(w, `{"Id":"season","Name":"Season 1","Type":"Season","ParentId":"series","SeriesId":"series"}`)
-		case "/emby/Users/user/Items/series":
-			fmt.Fprint(w, `{"Id":"series","Name":"Series","Type":"Series","ParentId":"library"}`)
-		case "/emby/Users/user/Items/library":
-			fmt.Fprint(w, `{"Id":"library","Name":"TV","Type":"CollectionFolder","ParentId":"root"}`)
-		case "/emby/Users/user/Items/root":
-			fmt.Fprint(w, `{"Id":"root","Name":"root","Type":"AggregateFolder"}`)
-		case "/emby/Shows/series/Seasons":
-			fmt.Fprint(w, `{"Items":[],"TotalRecordCount":2}`)
+		case "/emby/Items/season/Ancestors":
+			if r.URL.Query().Get("UserId") != "user" {
+				t.Error("ancestor lookup lost the user's virtual libraries")
+			}
+			// ParentId points to a physical folder, but Ancestors returns the
+			// user's configured virtual library. No name-based deduplication.
+			fmt.Fprint(w, `[{"Id":"series","Name":"Series","Type":"Series","ParentId":"physical-library"},{"Id":"library","Name":"TV","Type":"CollectionFolder"},{"Id":"root","Name":"Media Folders","Type":"UserRootFolder"}]`)
 		case "/emby/Shows/series/Episodes":
-			fmt.Fprint(w, `{"Items":[{"Id":"episode","Name":"Title","Type":"Episode","IndexNumber":1,"ParentIndexNumber":1}],"TotalRecordCount":1}`)
+			if r.URL.Query().Get("SeasonId") != "season" || r.URL.Query().Get("Limit") != "10" || r.URL.Query().Get("StartIndex") != "10" {
+				t.Error("season scope or pagination was lost")
+			}
+			fmt.Fprint(w, `{"Items":[{"Id":"episode","Name":"Title","Type":"Episode","IndexNumber":11,"ParentIndexNumber":1}],"TotalRecordCount":12}`)
 		default:
-			t.Errorf("unexpected request %s", r.URL.Path)
+			t.Errorf("redundant metadata request: %s", r.URL.Path)
 			w.WriteHeader(404)
 		}
 	}))
 	defer server.Close()
-	result, err := NewEmbyService(nil).FsList(context.Background(), &pb.FsListReq{Host: server.URL, UserId: "user", Token: "test", Path: "season", Limit: 10000})
+	result, err := NewEmbyService(nil).FsList(context.Background(), &pb.FsListReq{Host: server.URL, UserId: "user", Token: "test", Path: "season", StartIndex: 10, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,8 +184,59 @@ func TestFsListKeepsCompleteBreadcrumbs(t *testing.T) {
 	for _, p := range result.GetPaths() {
 		names = append(names, p.GetName())
 	}
-	if strings.Join(names, "/") != "Home/TV/Series/Season 1" {
-		t.Fatalf("breadcrumbs lost: %v", names)
+	if strings.Join(names, "/") != "Home/TV/Series/Season 1" || result.GetPaths()[1].GetPath() != "library" {
+		t.Fatalf("logical breadcrumbs lost: %v", result.GetPaths())
+	}
+	if requests != 3 {
+		t.Fatalf("directory took %d requests, expected 3", requests)
+	}
+}
+
+func TestFsListLegacyAncestorFallback(t *testing.T) {
+	currentLookups := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/emby/Users/user/Items/series":
+			currentLookups++
+			fmt.Fprint(w, `{"Id":"series","Name":"TV","Type":"Series","ParentId":"library"}`)
+		case "/emby/Users/user/Items/library":
+			fmt.Fprint(w, `{"Id":"library","Name":"TV","Type":"CollectionFolder","ParentId":"root"}`)
+		case "/emby/Users/user/Items/root":
+			fmt.Fprint(w, `{"Id":"root","Name":"root","Type":"UserRootFolder","ParentId":"unused"}`)
+		case "/emby/Items/series/Ancestors":
+			w.WriteHeader(http.StatusNotFound)
+		case "/emby/Shows/series/Seasons":
+			if r.ContentLength > 0 || r.URL.Query().Get("UserId") != "user" || r.URL.Query().Get("EnableImages") != "false" || r.URL.Query().Get("Limit") != "10" {
+				t.Error("season listing options must be query parameters")
+			}
+			fmt.Fprint(w, `{"Items":[{"Id":"season","Name":"Season 1","Type":"Season"}],"TotalRecordCount":1}`)
+		default:
+			t.Errorf("unexpected request: %s", r.URL.Path)
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	result, err := NewEmbyService(nil).FsList(context.Background(), &pb.FsListReq{Host: server.URL, UserId: "user", Token: "test", Path: "series", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if currentLookups != 1 || len(result.GetPaths()) != 3 || result.GetPaths()[1].GetPath() != "library" || result.GetPaths()[2].GetPath() != "series" {
+		t.Fatalf("legacy fallback lost legitimate same-name folders: %v", result)
+	}
+}
+
+func TestFsListViewsUsesQueryOptions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/emby/Users/user/Views" || r.ContentLength > 0 || r.URL.Query().Get("EnableImages") != "false" || r.URL.Query().Get("Limit") != "10" {
+			t.Error("library view options must be query parameters")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"Items":[],"TotalRecordCount":0}`)
+	}))
+	defer server.Close()
+	if _, err := NewEmbyService(nil).FsList(context.Background(), &pb.FsListReq{Host: server.URL, UserId: "user", Token: "test", Limit: 10}); err != nil {
+		t.Fatal(err)
 	}
 }
 

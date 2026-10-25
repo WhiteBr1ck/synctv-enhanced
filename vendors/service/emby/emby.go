@@ -159,12 +159,7 @@ func (a *EmbyService) GetItem(ctx context.Context, req *pb.GetItemReq) (*pb.Item
 
 func (a *EmbyService) FsList(ctx context.Context, req *pb.FsListReq) (*pb.FsListResp, error) {
 	cli := emby.NewClient(req.GetHost(), emby.WithContext(ctx), emby.WithKey(req.GetToken()), emby.WithUserID(req.GetUserId()))
-	var resp *emby.ItemsResp
-	var paths []*pb.Path
-	var err error
-	// A directory listing needs identity and hierarchy, not playback sources.
-	// MediaSources makes large Jellyfin libraries serialize every episode's
-	// streams and subtitle metadata before the first page can be displayed.
+	// Directory requests need hierarchy, not every episode's playback metadata.
 	listingFields := func(query map[string]string) {
 		query["Fields"] = "ParentId,Container"
 		query["EnableImages"] = "false"
@@ -172,144 +167,91 @@ func (a *EmbyService) FsList(ctx context.Context, req *pb.FsListReq) (*pb.FsList
 	}
 	opts := []emby.QueryFunc{listingFields}
 	if req.GetStartIndex() != 0 || req.GetLimit() != 0 {
-		opts = append(opts,
-			emby.WithStartIndex(req.GetStartIndex()),
-			emby.WithLimit(req.GetLimit()),
-		)
+		opts = append(opts, emby.WithStartIndex(req.GetStartIndex()), emby.WithLimit(req.GetLimit()))
 	}
-	if req.GetSearchTerm() != "" {
-		opts = append(opts,
-			emby.WithSortBy("SortName"),
-			emby.WithSortOrderAsc(),
-			emby.WithRecursive(),
-			emby.WithSearch(req.GetSearchTerm()),
-		)
-		if req.GetPath() != "" {
-			opts = append(opts, emby.WithParentID(req.GetPath()))
-			var item *emby.Items
-			item, err = cli.UserItemsByID(req.GetPath())
-			if err != nil {
-				return nil, err
-			}
-			paths = []*pb.Path{
-				{
-					Name: "Home",
-					Path: "",
-				},
-				{
-					Name: item.Name,
-					Path: item.ID,
-				},
-			}
-		} else {
-			paths = []*pb.Path{
-				{
-					Name: "Home",
-					Path: "",
-				},
-			}
-		}
-		resp, err = cli.UserItems(opts...)
-	} else if req.GetPath() == "" {
-		resp, err = cli.UserViews(opts...)
-		paths = []*pb.Path{
-			{
-				Name: "Home",
-				Path: "",
-			},
-		}
-	} else {
-		var item *emby.Items
-		item, err = cli.UserItemsByID(req.GetPath())
+	var current *emby.Items
+	var resp *emby.ItemsResp
+	var err error
+	if req.GetPath() != "" {
+		current, err = cli.UserItemsByID(req.GetPath())
 		if err != nil {
 			return nil, err
 		}
-		switch item.Type {
+	}
+	if req.GetSearchTerm() != "" {
+		opts = append(opts, emby.WithSortBy("SortName"), emby.WithSortOrderAsc(), emby.WithRecursive(), emby.WithSearch(req.GetSearchTerm()))
+		if current != nil {
+			opts = append(opts, emby.WithParentID(current.ID))
+		}
+		resp, err = cli.UserItems(opts...)
+	} else if current == nil {
+		resp, err = cli.UserViews(opts...)
+	} else {
+		switch current.Type {
 		case "CollectionFolder", "Folder", "UserRootFolder", "AggregateFolder":
-			opts = append(opts,
-				emby.WithSortBy("SortName"),
-				emby.WithSortOrderAsc(),
-				emby.WithParentID(item.ID),
-			)
-			// Jellyfin can omit CollectionType on a CollectionFolder lookup.
-			// Browse its immediate children in that case: an unfiltered recursive
-			// query flattens the entire library into episodes. Only recurse when
-			// an explicit library type also restricts the results to top-level media.
-			switch item.CollectionType {
+			opts = append(opts, emby.WithSortBy("SortName"), emby.WithSortOrderAsc(), emby.WithParentID(current.ID))
+			// Jellyfin can omit CollectionType. Only recurse when an explicit
+			// library type also restricts the results to top-level media.
+			switch current.CollectionType {
 			case "movies":
-				opts = append(opts,
-					emby.WithRecursive(),
-					emby.WithIncludeItemTypes("Movie"),
-				)
+				opts = append(opts, emby.WithRecursive(), emby.WithIncludeItemTypes("Movie"))
 			case "tvshows":
-				opts = append(opts,
-					emby.WithRecursive(),
-					emby.WithIncludeItemTypes("Series"),
-				)
+				opts = append(opts, emby.WithRecursive(), emby.WithIncludeItemTypes("Series"))
 			}
 			resp, err = cli.UserItems(opts...)
 		case "Series":
-			resp, err = cli.Seasons(item.ID, opts...)
+			resp, err = cli.Seasons(current.ID, opts...)
 		case "Season":
-			resp, err = cli.Seasons(item.ParentID,
-				emby.WithStartIndex(req.GetStartIndex()),
-				emby.WithLimit(req.GetLimit()),
-			)
-			if err != nil {
-				return nil, err
+			seriesID := current.SeriesID
+			if seriesID == "" {
+				seriesID = current.ParentID
 			}
-			if resp.TotalRecordCount == 1 {
-				resp, err = cli.UserItems(
-					emby.WithParentID(item.ID),
-					emby.WithRecursive(),
-					listingFields,
-				)
-			} else {
-				resp, err = cli.Episodes(item.SeriesID, item.ID, opts...)
-			}
+			resp, err = cli.Episodes(seriesID, current.ID, opts...)
 		default:
-			return nil, fmt.Errorf("unknown type: %s", item.Type)
-		}
-		paths = []*pb.Path{
-			{
-				Name: "Home",
-				Path: "",
-			},
-			{
-				Name: item.Name,
-				Path: item.ID,
-			},
+			return nil, fmt.Errorf("unknown type: %s", current.Type)
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
-	items := make([]*pb.Item, len(resp.Items))
-	if req.GetPath() != "" {
-		lineage := []*pb.Path{}
-		seen := map[string]bool{}
-		id := req.GetPath()
-		for id != "" && !seen[id] && len(lineage) < 16 {
-			seen[id] = true
-			parent, e := cli.UserItemsByID(id)
-			if e != nil {
-				break
+	paths := []*pb.Path{{Name: "Home", Path: ""}}
+	if current != nil {
+		lineage := []*emby.Items{current}
+		ancestors, ancestorErr := cli.Ancestors(current.ID)
+		if ancestorErr == nil {
+			lineage = append(lineage, ancestors...)
+		} else {
+			// Older servers can lack the ancestor endpoint. Reuse the current
+			// item and stop at system roots instead of querying it twice.
+			seen := map[string]bool{current.ID: true}
+			parentID := current.ParentID
+			for parentID != "" && !seen[parentID] && len(lineage) < 16 {
+				seen[parentID] = true
+				parent, e := cli.UserItemsByID(parentID)
+				if e != nil {
+					break
+				}
+				lineage = append(lineage, parent)
+				if parent.Type == "UserRootFolder" || parent.Type == "AggregateFolder" {
+					break
+				}
+				parentID = parent.ParentID
 			}
-			if parent.Type != "UserRootFolder" && parent.Type != "AggregateFolder" {
-				lineage = append([]*pb.Path{{Name: parent.Name, Path: parent.ID}}, lineage...)
-			}
-			id = parent.ParentID
 		}
-		paths = append([]*pb.Path{{Name: "Home", Path: ""}}, lineage...)
+		seen := map[string]bool{}
+		for i := len(lineage) - 1; i >= 0; i-- {
+			item := lineage[i]
+			if item.ID != "" && !seen[item.ID] && item.Type != "UserRootFolder" && item.Type != "AggregateFolder" {
+				seen[item.ID] = true
+				paths = append(paths, &pb.Path{Name: item.Name, Path: item.ID})
+			}
+		}
 	}
+	items := make([]*pb.Item, len(resp.Items))
 	for i, item := range resp.Items {
 		items[i] = item2pb(item)
 	}
-	return &pb.FsListResp{
-		Items: items,
-		Paths: paths,
-		Total: resp.TotalRecordCount,
-	}, nil
+	return &pb.FsListResp{Items: items, Paths: paths, Total: resp.TotalRecordCount}, nil
 }
 
 func (a *EmbyService) GetSystemInfo(ctx context.Context, req *pb.SystemInfoReq) (*pb.SystemInfoResp, error) {

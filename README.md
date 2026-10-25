@@ -12,7 +12,7 @@
 - Jellyfin/Emby 目录一次读取后排序，避免为一个大型媒体库连续请求几十页。
 - 聊天消息按房间保存在服务器，保留最近 500 条，退出、换设备或容器重启后自动恢复。
 - 聊天位于底部时跟随新消息；阅读旧消息时保留位置，点击新消息提示可返回底部。播放器弹幕发送成功后清空输入。
-- 目录面包屑保留媒体库、剧集和季的层级；每个房间分别记住目录、分页和搜索，刷新后恢复。
+- 目录面包屑使用媒体服务器按用户返回的层级，保留媒体库、剧集和季；每个房间分别记住目录、分页和搜索，刷新后恢复。
 - 播放器内顶部显示当前影片名称，画质、音轨、字幕、同步和相关设置采用独立图标。
 - 播放器右键“统计信息”保留原版内容，新增部分显示实际视频及窗口分辨率、帧率、解码格式、视频直通或转码、色深、音频格式与处理方式、缓冲、缓冲等待、最近同步跳转和 SDR/HDR。无法取得的字段显示 `—`。
 - MP4/MKV 原文件提供内封音轨选择；浏览器不支持默认音频编码时，自动启用 AAC 立体声兼容音频，视频仍按原文件播放。
@@ -31,11 +31,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.10` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.11` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.10
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.10
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.11
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.11
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
@@ -57,6 +57,7 @@ Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
 
 - 大小与修改时间适用于 AList/OpenList 目录。搜索接口没有日期，搜索时日期排序会切回名称。
 - Emby/Jellyfin 目录提供名称和类型排序。
+- AList 上游未提供索引搜索时，自动搜索当前目录（最多 10000 项），界面显示搜索范围；不会递归扫描整个网盘。
 - Jellyfin/Emby 返回 ASS/SSA 时直接请求 ASS，避免经过 SRT 丢失样式；原文件可读取时自动提取内封字幕和附件字体。
 - PGS/VobSub 图片字幕不在本版文字字幕范围内；AList/OpenList 与普通直链暂不提供视频转码。
 - HDR 使用浏览器原生播放链路，不增加 HDR→SDR 转换；实际输出取决于浏览器、系统和显示设备。

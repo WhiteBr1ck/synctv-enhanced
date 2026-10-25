@@ -192,9 +192,10 @@ type MoviePath struct {
 }
 
 type MovieList struct {
-	Paths  []*MoviePath `json:"paths"`
-	Movies []*Movie     `json:"movies"`
-	Total  int64        `json:"total"`
+	Paths       []*MoviePath `json:"paths"`
+	Movies      []*Movie     `json:"movies"`
+	Total       int64        `json:"total"`
+	SearchScope string       `json:"searchScope,omitempty"`
 }
 
 type MoviesResp struct {

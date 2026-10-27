@@ -24,8 +24,6 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: synctv-web/package-lock.json
-      - name: Install FFmpeg for real media fixtures
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install frontend dependencies
         working-directory: synctv-web
         run: npm ci --no-audit --no-fund
@@ -33,7 +31,9 @@ jobs:
         working-directory: synctv-web
         run: npm run build
       - name: Test subtitles, transport, sorting, chat and video statistics
-        run: node --test subtitle-gateway/*.test.mjs
+        run: |
+          docker run --rm -v "$PWD:/work:ro" -w /work node:24-alpine sh -c \
+            'apk add --no-cache ffmpeg >/dev/null && node --test subtitle-gateway/*.test.mjs'
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod

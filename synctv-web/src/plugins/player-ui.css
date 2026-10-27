@@ -17,6 +17,11 @@
 .art-video-player .art-controls-right .art-control {
   padding: 0 7px;
 }
+.art-video-player.art-fullscreen:not(.art-control-show) .art-bottom,
+.art-video-player.art-fullscreen-web:not(.art-control-show) .art-bottom {
+  opacity: 0;
+  pointer-events: none;
+}
 .art-video-player .art-selector-list {
   width: max-content;
   min-width: 150px;

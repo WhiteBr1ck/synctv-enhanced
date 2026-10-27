@@ -16,7 +16,7 @@ COPY . ./
 COPY --from=web-builder /web/dist/ ./public/dist/
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=v0.9.15-enhanced.15
+ARG VERSION=v0.9.15-enhanced.16
 ARG GIT_COMMIT=unknown
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GOMAXPROCS=4 \

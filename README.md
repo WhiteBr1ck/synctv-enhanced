@@ -18,6 +18,7 @@
 - MP4/MKV 原文件提供内封音轨选择；浏览器不支持默认音频编码时，自动启用 AAC 立体声兼容音频，视频仍按原文件播放。
 - Jellyfin 播放请求统一使用 120 Mbps 上限，避免旧的 8 Mbps 限制让高码率原片意外转码；HDR 自动路线只允许视频复制，拒绝视频重编码。
 - AAC 备用音频按播放速度适度预读，等待加载期间保持同一请求；兼容 Jellyfin 的转码会话清理接口。
+- 浏览器全屏和网页全屏隐藏控制栏时，同时隐藏底部迷你进度条；唤出控制栏后恢复正常进度操作。
 - Jellyfin/Emby 提供 HLS 转换流且确认原片为 SDR 时，可在“画质”菜单选择 H.264 兼容；“自动处理”沿用媒体服务器选择的流，“原画”直接读取原文件。默认转换流可能仅转封装，不保证改变编码。
 - 刷新未变化的播放地址不再重新加载视频，切集后取消旧播放器的异步操作。
 - 齿轮“同步设置”按本机保存：双向校准 / 仅向前追赶 / 关闭定时校准，进度容差 10–30 秒，检查间隔 10–60 秒。默认沿用原版每 10 秒检查、超过约 10 秒误差才校准；设置仅影响定时校准，成员主动操作和手动同步仍正常生效。
@@ -33,11 +34,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.15` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.16` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.15
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.15
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.16
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.16
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。

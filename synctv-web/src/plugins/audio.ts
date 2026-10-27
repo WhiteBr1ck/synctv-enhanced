@@ -65,7 +65,7 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
       void audio.play().then(() => { if (current === generation) remove("audio-start"); }).catch(() => {
         if (disposed || current !== generation) return;
         playBlocked = true;
-        art.controls.update({ name: "audio-start", position: "right", html: "开启声音", click: () => { playBlocked = false; play(); } });
+        art.controls.update({ name: "audio-start", position: "right", index: 16, html: "开启声音", click: () => { playBlocked = false; play(); } });
         art.notice.show = "浏览器阻止了声音自动播放，请点击“开启声音”";
       });
     };
@@ -121,7 +121,7 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
         })
       ];
       const onSelect = (item: any) => { select(tracks.find(track => track.index === item.index)); return controlIcon('audio','音轨'); };
-      if (!Artplayer.utils.isMobile || art.fullscreen) art.controls.update({ name: "audio-embedded", position: "right", html: controlIcon('audio','音轨'), selector, onSelect });
+      if (!Artplayer.utils.isMobile || art.fullscreen) art.controls.update({ name: "audio-embedded", position: "right", index: 14, html: controlIcon('audio','音轨'), selector, onSelect });
       else if (art.controls["audio-embedded"]) art.controls.remove("audio-embedded");
       art.setting.update({ name: "audio-embedded", html: "音轨",icon:icon('audio'), selector, onSelect:(item:any)=>{onSelect(item);return item.index<0?'原声自动':'AAC 兼容';}, width: 420 });
     };

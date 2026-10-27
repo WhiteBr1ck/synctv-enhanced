@@ -2,6 +2,7 @@ import Artplayer from "artplayer";
 import type { BaseMovieInfo } from "@/types/Movie";
 import type { VideoInfo } from "@/utils/video-info";
 import { playbackSummary } from "@/utils/playback-summary";
+import { TransferMeter, formatTransferRate, type TransferTotals } from "@/utils/transfer-meter";
 import "./video-info.css";
 
 interface ProbeInfo {
@@ -12,6 +13,9 @@ interface ProbeInfo {
 }
 export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
   return (art: Artplayer) => {
+    const transfer = new TransferMeter();
+    art.on("synctv:network" as any, (totals: TransferTotals) => transfer.update(totals));
+    art.on("synctv:network-reset" as any, () => transfer.reset());
     let context = initialContext,
       info: ProbeInfo | undefined,
       request: AbortController | undefined,
@@ -50,6 +54,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       playback: "播放方式",
       depth: "色深",
       audio: "音频",
+      network: "网速",
       buffer: "缓冲",
       waiting: "缓冲等待",
       sync: "最近同步跳转",
@@ -104,6 +109,8 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       set("depth", summary.depth ? `${summary.depth} bit` : "—");
       set("audio", summary.audio);
       set("range", summary.dynamicRange);
+      const speed = transfer.rates();
+      set("network", speed ? `↓ ${formatTransferRate(speed.download)} · ↑ ${formatTransferRate(speed.upload)}` : "—");
       let ahead = 0;
       for (let i = 0; i < video.buffered.length; i++)
         if (

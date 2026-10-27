@@ -30,6 +30,10 @@ before(async () => {
     '-metadata:s:t', 'mimetype=application/x-truetype-font', path.join(temp, 'movie.mkv')]);
   ffmpeg(['-i', path.join(temp, 'movie.mkv'), '-map', '0:v', '-map', '0:s:1', '-c:v', 'copy', '-c:s', 'mov_text',
     '-movflags', '+faststart', path.join(temp, 'movie.mp4')]);
+  const font = fileURLToPath(new URL('../synctv-web/src/plugins/artplayer-plugin-ass/fonts/TimesNewRoman.ttf', import.meta.url));
+  ffmpeg(['-i', path.join(temp, 'movie.mkv'), '-map', '0:v', '-map', '0:s', '-c', 'copy',
+    ...Array.from({ length: 20 }, (_, i) => ['-attach', font, `-metadata:s:t:${i}`, `filename=fixture-${i}.ttf`,
+      `-metadata:s:t:${i}`, 'mimetype=application/x-truetype-font']).flat(), path.join(temp, 'movie.fonts.mkv')]);
   ffmpeg(['-f', 'lavfi', '-i', 'color=s=320x180:r=24:d=1', '-c:v', 'libx265', '-preset', 'ultrafast',
     '-pix_fmt', 'yuv420p10le', '-tag:v', 'hvc1',
     '-x265-params', 'pools=none:frame-threads=1:log-level=error:colorprim=9:transfer=16:colormatrix=9:hdr10=1',
@@ -225,6 +229,22 @@ test('reads an MP4 mov_text subtitle as timed text', async () => {
   assert.equal(tracks.length, 1);
   assert.equal(tracks[0].type, 'srt');
   assert.match(await (await fetch(origin + tracks[0].url)).text(), /Embedded SRT OK/);
+});
+
+test('preserves embedded fonts after the sixteenth attachment and serves the later font', async () => {
+  extension = 'fonts.mkv';
+  try {
+    const discovery = await source();
+    const { tracks } = await (await fetch(origin + discovery)).json();
+    assert.equal(tracks[0].fonts.length, 20);
+    const font = await fetch(origin + tracks[0].fonts[19]);
+    assert.equal(font.status, 200);
+    assert.deepEqual(Buffer.from(await font.arrayBuffer()), await readFile(fileURLToPath(new URL('../synctv-web/src/plugins/artplayer-plugin-ass/fonts/TimesNewRoman.ttf', import.meta.url))));
+    const session = gateway.store.get(discovery.split('/')[3]);
+    await assert.rejects(stat(path.join(session.dir, `track-${tracks[0].index}.ass`)), { code: 'ENOENT' }, 'font reads do not scan or extract the episode subtitle');
+    const ass = await (await fetch(origin + tracks[0].url)).text();
+    assert.match(ass, /Embedded ASS OK/);
+  } finally { extension = 'mkv'; }
 });
 test('registers an Emby/Jellyfin original media stream for embedded subtitle discovery', async () => {
   extension = 'mkv'; provider = 'emby';

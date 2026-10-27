@@ -27,6 +27,7 @@ export default function artplayerPluginAss(options = {}) {
     let disposed = false;
     let generation = 0;
     let visible = false;
+    let buffering = false;
     let offset = 0;
     let appearance = loadSubtitleAppearance();
     let originalContent = "";
@@ -37,7 +38,7 @@ export default function artplayerPluginAss(options = {}) {
       if (!instance?.worker || !instance.workerActive || disposed) return;
       instance.resize();
       instance.setRate(art.video.playbackRate);
-      instance.setIsPaused(art.video.paused, art.currentTime + offset);
+      instance.setIsPaused(art.video.paused || art.video.ended || art.video.seeking || buffering || art.video.readyState < 3, art.currentTime + offset);
       instance.setCurrentTime(art.currentTime + offset);
     };
     const updatePosition = () => {
@@ -111,7 +112,9 @@ export default function artplayerPluginAss(options = {}) {
     art.on("artplayer-plugin-ass:switch", (track) => { setVisible(true); void select(track); });
     art.on("artplayer-plugin-ass:visible", setVisible);
     art.on("subtitleOffset", (value) => { offset = value; if (instance) instance.timeOffset = value; });
-    for (const event of ['ready','restart','resize','fullscreen','fullscreenWeb','video:loadedmetadata','video:seeked','video:playing']) art.on(event, refresh);
+    for (const event of ['video:waiting','video:stalled','video:seeking']) art.on(event, () => { buffering = true; refresh(); });
+    art.on('video:playing', () => { buffering = false; refresh(); });
+    for (const event of ['ready','restart','resize','fullscreen','fullscreenWeb','video:loadedmetadata','video:seeked','video:pause','video:ended']) art.on(event, refresh);
     art.on("artplayer-plugin-ass:appearance", (value) => {
       const resized = value.scale !== appearance.scale;
       appearance = { ...value };

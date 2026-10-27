@@ -60,6 +60,7 @@ const newSyncControl = (art: Artplayer, publishStatus: (msg: Message) => boolean
     name: "syncPlugin",
     html: controlIcon('sync','同步'),
     position: "right",
+    index: 25,
     click: syncControl
   });
 

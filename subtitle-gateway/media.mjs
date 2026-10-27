@@ -146,7 +146,7 @@ export class MediaStore {
         source.info = { video: videoInfo(probe), audioTracks: source.audioTracks,
           container: probe.format?.format_name, sourceIndex: source.sourceIndex };
         source.attachments = streams.filter(stream => stream.codec_type === 'attachment' &&
-          (/^(ttf|otf)$/.test(stream.codec_name || '') || /\.(ttf|otf)$/i.test(stream.tags?.filename || ''))).slice(0, 16);
+          (/^(ttf|otf)$/.test(stream.codec_name || '') || /\.(ttf|otf)$/i.test(stream.tags?.filename || ''))).slice(0, 64);
         const fonts = source.attachments.map(stream => `/_synctv/subtitles/${source.key}/font-${stream.index}`);
         source.tracks = streams.filter(stream => stream.codec_type === 'subtitle' && codecs[stream.codec_name]).map(stream => {
           const type = codecs[stream.codec_name];
@@ -176,20 +176,14 @@ export class MediaStore {
         const staging = await mkdtemp(path.join(source.dir, '.job-'));
         try {
           const destination = path.join(staging, `track.${type}`);
-          const fonts = type === 'ass' ? source.attachments : [];
-          const attachments = fonts.flatMap(font => [`-dump_attachment:${font.index}`, path.join(staging, `font-${font.index}`)]);
           const muxer = type === 'vtt' ? 'webvtt' : type;
           await run(this.ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-            ...inputArgs(source), ...attachments, '-i', source.url, '-map', `0:${index}`, '-vn', '-an',
+            ...inputArgs(source), '-i', source.url, '-map', `0:${index}`, '-vn', '-an',
             '-c:s', type === 'ass' ? 'ass' : type === 'srt' ? 'srt' : 'webvtt',
             '-f', muxer, '-fs', String(maxSubtitle), destination], { timeout: 300000, limit: 1024 });
           const content = await readFile(destination);
           if (content.length >= maxSubtitle) throw new Error('字幕超过大小限制');
           if (type === 'ass' && !content.includes(Buffer.from('[Events]'))) throw new Error('ASS 字幕内容无效');
-          for (const font of fonts) {
-            const candidate = path.join(staging, `font-${font.index}`);
-            if (await this.validFile(candidate, maxFont)) await rename(candidate, path.join(source.dir, `font-${font.index}`));
-          }
           await rename(destination, file);
           return file;
         } finally { await rm(staging, { recursive: true, force: true }); }
@@ -229,13 +223,30 @@ export class MediaStore {
   }
 
   async font(source, index) {
-    const tracks = await this.tracks(source);
+    await this.tracks(source);
     if (!source.attachments.some(font => font.index === index)) throw new Error('字体不存在');
     const file = path.join(source.dir, `font-${index}`);
     if (!await this.validFile(file, maxFont)) {
-      const ass = tracks.find(track => track.type === 'ass');
-      if (!ass) throw new Error('字体不存在');
-      await this.file(source, ass.index, ass.type);
+      if (!source.pendingFonts) {
+        source.busy++;
+        source.pendingFonts = this.jobs.run(async () => {
+          await mkdir(source.dir, { recursive: true });
+          const staging = await mkdtemp(path.join(source.dir, '.job-'));
+          try {
+            // Matroska font attachments are in its header. Stop before decoding
+            // any video frames instead of scanning an entire episode's subtitle.
+            const attachments = source.attachments.flatMap(font => [`-dump_attachment:${font.index}`, path.join(staging, `font-${font.index}`)]);
+            await run(this.ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
+              ...inputArgs(source), ...attachments, '-i', source.url,
+              '-map', '0:v:0', '-frames:v', '0', '-an', '-sn', '-f', 'null', '-'], { timeout: 45000, limit: 1024 });
+            for (const font of source.attachments) {
+              const candidate = path.join(staging, `font-${font.index}`);
+              if (await this.validFile(candidate, maxFont)) await rename(candidate, path.join(source.dir, `font-${font.index}`));
+            }
+          } finally { await rm(staging, { recursive: true, force: true }); }
+        }).finally(() => { source.pendingFonts = null; source.busy--; });
+      }
+      await source.pendingFonts;
     }
     if (!await this.validFile(file, maxFont)) throw new Error('无法读取内封字体');
     return file;

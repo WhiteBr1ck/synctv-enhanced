@@ -239,6 +239,7 @@ export default function artplayerPluginMediaControl() {
           art.controls.update({
             name,
             position: "right",
+            index: name === "quality" ? 20 : 12,
             html: controlIcon(name==='quality'?'quality':'audio',title),
             style: { padding: "0 10px" },
             selector,

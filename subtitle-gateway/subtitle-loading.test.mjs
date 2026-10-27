@@ -24,19 +24,19 @@ function player(){
     select:key=>controls.get('subtitle').onSelect({key})};
 }
 
-test('episode subtitles start before discovery and stay visible while embedded extraction is pending',async()=>{
+test('episode subtitles start before discovery and add fonts without scanning the original movie again',async()=>{
   const originalFetch=globalThis.fetch,originalStorage=globalThis.localStorage;
-  const discovery=deferred(),embedded=deferred();
+  const discovery=deferred(); const requests=[];
   globalThis.localStorage={getItem:()=>null,setItem(){}};
-  globalThis.fetch=async url=>url==='native'?text('native ASS'):url==='tracks'?discovery.promise:embedded.promise;
+  globalThis.fetch=async url=>{requests.push(url);if(url==='native')return text('native ASS');if(url==='tracks')return discovery.promise;throw new Error('Unnecessary original movie extraction');};
   const art=player();
   try{
     artplayerSubtitle({native:{url:'native',type:'ass',origin:'embedded',language:'chi',index:2,default:true}},'tracks',true)(art);
     await tick();assert.equal(art.state.tracks[0].content,'native ASS');
     discovery.resolve({ok:true,json:async()=>({tracks:[{url:'embedded',type:'ass',index:2,language:'chi',default:true,fonts:['font.ttf']}]})});
-    await tick();assert.equal(art.state.visible,true);assert.equal(art.state.tracks.length,1);
-    embedded.resolve(text('extracted ASS'));await tick();
-    assert.equal(art.state.tracks.at(-1).content,'extracted ASS');assert.deepEqual(art.state.tracks.at(-1).fonts,['font.ttf']);
+    await tick();assert.equal(art.state.visible,true);
+    assert.equal(art.state.tracks.at(-1).content,'native ASS');assert.deepEqual(art.state.tracks.at(-1).fonts,['font.ttf']);
+    assert.ok(!requests.includes('embedded'));
   }finally{art.emit('destroy');globalThis.fetch=originalFetch;globalThis.localStorage=originalStorage;}
 });
 

@@ -39,6 +39,7 @@ const resetP2P = () => {
   if (p2pEngine.value) p2pEngine.value.destroy();
   p2pEngine.value = undefined;
   p2pStats.value = undefined;
+  if (art && !art.isDestroy) art.emit("synctv:network-reset" as any);
 };
 
 const p2pOperation = {
@@ -85,6 +86,12 @@ export interface p2pStatsType {
   p2pDownloadSpeed: number;
 }
 
+const recordTransferStats = (stats: p2pStatsType, engine: p2pOperationType, player: Artplayer) => {
+  if (p2pEngine.value !== engine || player.isDestroy) return;
+  p2pStats.value = { ...stats };
+  player.emit("synctv:network" as any, stats);
+};
+
 const Props = defineProps({
   options: {
     type: Object as PropType<options>,
@@ -114,14 +121,7 @@ const playMedia = async (player: HTMLMediaElement, url: string, art: any) => {
       console.error(err);
       player.src = url;
     });
-  engine.on("stats", (stats) => {
-    console.group("p2p stats");
-    console.log(stats);
-    console.groupEnd();
-    p2pStats.value = {
-      ...stats
-    };
-  });
+  engine.on("stats", (stats) => recordTransferStats(stats, engine, art));
   p2pEngine.value = engine;
 };
 
@@ -156,14 +156,7 @@ const playMpd = async (player: HTMLMediaElement, url: string, art: any) => {
     }
   };
   const engine = new P2pEngineDash(d, p2pConfig);
-  engine.on("stats", (stats) => {
-    console.group("p2p stats");
-    console.log(stats);
-    console.groupEnd();
-    p2pStats.value = {
-      ...stats
-    };
-  });
+  engine.on("stats", (stats) => recordTransferStats(stats, engine, art));
   d.on(dashjs.MediaPlayer.events.PROTECTION_DESTROYED, () => {
     resetP2P();
   });
@@ -274,14 +267,7 @@ const playM3u8 = async (player: HTMLMediaElement, url: string, art: Artplayer) =
   if (!Hls.isSupported()) {
     if (player.canPlayType("application/vnd.apple.mpegurl")) {
       const engine = new P2pEngineHls(p2pConfig);
-      engine.on("stats", (stats) => {
-        console.group("p2p stats");
-        console.log(stats);
-        console.groupEnd();
-        p2pStats.value = {
-          ...stats
-        };
-      });
+      engine.on("stats", (stats) => recordTransferStats(stats, engine, art));
       engine
         .registerServiceWorker()
         .catch(() => {})
@@ -353,14 +339,7 @@ const playM3u8 = async (player: HTMLMediaElement, url: string, art: Artplayer) =
 
   const engine = new P2pEngineHls(p2pConfig);
 
-  engine.on("stats", (stats) => {
-    console.group("p2p stats");
-    console.log(stats);
-    console.groupEnd();
-    p2pStats.value = {
-      ...stats
-    };
-  });
+  engine.on("stats", (stats) => recordTransferStats(stats, engine, art));
 
   hls.once(Hls.Events.DESTROYING, () => {
     resetP2P();

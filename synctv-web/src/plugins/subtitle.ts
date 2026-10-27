@@ -28,7 +28,7 @@ export function artplayerSubtitle(
       ])
     );
     let selected = "",
-      selectedUrl = "",
+      selectedVersion = "",
       manual = false,
       disposed = false,
       textMode = false;
@@ -66,13 +66,14 @@ export function artplayerSubtitle(
     for (const event of ["video:timeupdate", "video:seeked", "ready", "restart"])
       art.on(event as any, refresh);
     const emit = (name: string, value: unknown) => art.emit(name as any, value);
+    const version = (item?: Subtitle) => JSON.stringify([item?.url || "", item?.fonts || []]);
     const select = async (key: string, isManual = false) => {
       selected = key;
       manual ||= isManual;
       selectAbort?.abort();
       const controller = (selectAbort = new AbortController());
       const item = items.get(key);
-      selectedUrl = item?.url || "";
+      selectedVersion = version(item);
       const clear = () => {
         textMode = false;
         textCues = [];
@@ -148,6 +149,7 @@ export function artplayerSubtitle(
         art.controls.update({
           name: "subtitle",
           position: "right",
+          index: 10,
           html: controlIcon("subtitle", "字幕"),
           selector,
           onSelect
@@ -169,7 +171,7 @@ export function artplayerSubtitle(
       if (disposed || selectAbort) return;
       if (manual) {
         const same = items.get(selected);
-        if (same && same.url !== selectedUrl) void select(selected);
+        if (same && version(same) !== selectedVersion) void select(selected);
         return;
       }
       if (preference?.enabled === false) {
@@ -193,7 +195,7 @@ export function artplayerSubtitle(
         entries.find(([, t]) => t.default) ||
         entries.find(([, t]) => /^(zh|chi|zho|chs|cht)/i.test(t.language || "")) ||
         entries[0];
-      if (match && (match[0] !== selected || match[1].url !== selectedUrl)) void select(match[0]);
+      if (match && (match[0] !== selected || version(match[1]) !== selectedVersion)) void select(match[0]);
     };
     update();
     // Jellyfin's existing subtitle URL is usable immediately. Probing the
@@ -219,7 +221,9 @@ export function artplayerSubtitle(
               track.title && track.title !== track.language
                 ? track.title
                 : metadata?.title || track.title;
-            items.set(target, { ...metadata, ...track, title, origin: "embedded" });
+            // Keep the server's complete, immediately available ASS. Discovery
+            // adds fonts without forcing a second full scan of the movie.
+            items.set(target, { ...metadata, ...track, url: metadata?.url || track.url, title, origin: "embedded" });
           }
           update();
           choose();

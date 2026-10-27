@@ -650,7 +650,7 @@ func (c *Client) UserPlaybackInfo(id string, opts ...UserPlaybackInfoOption) (*P
 		StartTimeTicks:      0,
 		IsPlayback:          true,
 		AutoOpenLiveStream:  true,
-		MaxStreamingBitrate: 8000001,
+		MaxStreamingBitrate: 120000000,
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -693,6 +693,22 @@ func (c *Client) DeleteActiveEncodeings(playSessionID string) error {
 	resp, err := c.Do(req)
 	if err != nil {
 		return err
+	}
+	// Jellyfin uses DELETE instead of Emby's legacy POST route. Keep the
+	// non-empty session on both routes so cleanup never stops another viewer.
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		resp.Body.Close()
+		req, err = c.NewRequest(http.MethodDelete, "/emby/Videos/ActiveEncodings", nil, map[string]string{
+			"DeviceId":      "SyncTV",
+			"PlaySessionId": playSessionID,
+		})
+		if err != nil {
+			return err
+		}
+		resp, err = c.Do(req)
+		if err != nil {
+			return err
+		}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {

@@ -199,7 +199,7 @@ export class MediaStore {
     source.busy++;
     // Only audio is mapped. The original video URL and encoded video are untouched.
     const child = spawn(this.ffmpeg, ['-nostdin', '-hide_banner', '-loglevel', 'error',
-      ...inputArgs(source), '-ss', String(start), '-readrate', String(Math.max(3, rate * 1.25)), '-i', source.url,
+      ...inputArgs(source), '-ss', String(start), '-readrate', String(rate * 1.15), '-readrate_initial_burst', '3', '-threads', '1', '-i', source.url,
       '-map', `0:${index}`, '-vn', '-sn', '-dn', '-c:a', 'aac', '-ac', '2', '-ar', '48000', '-b:a', '192k',
       '-threads', '1', '-af', 'asetpts=PTS-STARTPTS', '-movflags', 'empty_moov+frag_keyframe+default_base_moof',
       '-frag_duration', '500000', '-f', 'mp4', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });

@@ -13,6 +13,7 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
     let disposed = false, origin = 0, startedAt = 0, generation = 0, playBlocked = false;
     let discovery: AbortController | undefined;
     let pauseTimer: ReturnType<typeof setTimeout> | undefined;
+    let playAttempt: Promise<void> | undefined;
     const video = art.video;
     const audio = document.createElement("audio");
     audio.preload = "auto";
@@ -29,6 +30,7 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
     };
     const stopStream = () => {
       generation++;
+      playAttempt = undefined;
       audio.pause(); audio.removeAttribute("src"); audio.load();
     };
     const restore = () => {
@@ -60,14 +62,16 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
       volume();
     };
     const play = () => {
-      if (disposed || !selected || playBlocked || video.paused || !audio.getAttribute("src")) return;
+      if (disposed || !selected || playBlocked || playAttempt || video.paused || !audio.getAttribute("src")) return;
       const current = generation;
-      void audio.play().then(() => { if (current === generation) remove("audio-start"); }).catch(() => {
+      const attempt = audio.play().then(() => { if (current === generation) remove("audio-start"); }).catch((error) => {
         if (disposed || current !== generation) return;
+        if (error.name !== 'NotAllowedError') return;
         playBlocked = true;
         art.controls.update({ name: "audio-start", position: "right", index: 16, html: "开启声音", click: () => { playBlocked = false; play(); } });
         art.notice.show = "浏览器阻止了声音自动播放，请点击“开启声音”";
-      });
+      }).finally(() => { if (playAttempt === attempt) playAttempt = undefined; });
+      playAttempt = attempt;
     };
     const begin = () => {
       if (disposed || !selected) return;
@@ -88,11 +92,14 @@ export function artplayerEmbeddedAudio(initialContext: BaseMovieInfo) {
       if (disposed || !selected) return;
       if (video.paused || video.seeking || video.readyState < 3) { audio.pause(); return; }
       if (!audio.getAttribute("src")) { begin(); return; }
+      // An empty/initially buffering audio element has no playable timeline yet.
+      // Restarting it every five seconds can prevent a slow NAS from ever loading.
+      if (audio.readyState < 3 || playAttempt) return;
       const correction = audioCorrection(video.currentTime, audio.currentTime, origin, video.playbackRate);
       if (Math.abs(correction.drift) > 0.35) {
         const seekable = Array.from({ length: audio.seekable.length }, (_, i) => [audio.seekable.start(i), audio.seekable.end(i)]);
         if (seekable.some(([start, end]) => correction.expected >= start && correction.expected < end - 0.05)) audio.currentTime = correction.expected;
-        else if (Date.now() - startedAt > 5000 && Math.abs(correction.drift) > 1.5) { begin(); return; }
+        else if (Date.now() - startedAt > 15000 && Math.abs(correction.drift) > 1.5) { begin(); return; }
       }
       audio.playbackRate = Math.max(0.25, Math.min(5, correction.rate));
       if (audio.paused) play();

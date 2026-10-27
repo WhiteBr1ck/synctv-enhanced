@@ -292,6 +292,14 @@ func processMediaSource(
 
 	switch {
 	case v.GetTranscodingUrl() != "":
+		if wouldConvertHDR(v.GetTranscodingUrl(), v) {
+			raw, err := originalEmbyURL(aucd, truePath, v)
+			if err != nil {
+				return nil, err
+			}
+			source.URL = raw
+			return source, nil
+		}
 		source.URL = fmt.Sprintf("%s/emby%s", aucd.Host, v.GetTranscodingUrl())
 		source.IsTranscode = true
 	case v.GetDirectPlayUrl() != "":

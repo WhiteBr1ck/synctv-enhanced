@@ -2,10 +2,39 @@ package cache
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
+	"github.com/synctv-org/synctv/internal/model"
 	"github.com/synctv-org/vendors/api/emby"
 )
+
+func TestAutomaticHDRNeverUsesVideoTranscoding(t *testing.T) {
+	source := &emby.MediaSourceInfo{Container: "mkv", MediaStreamInfo: []*emby.MediaStreamInfo{{Type: "Video", Codec: "hevc", VideoRangeType: "HDR10", ColorTransfer: "smpte2084"}}}
+	for _, tc := range []struct {
+		query  string
+		unsafe bool
+	}{
+		{"VideoCodec=hevc&TranscodeReasons=AudioCodecNotSupported,ContainerNotSupported", false},
+		{"VideoCodec=hevc&TranscodeReasons=ContainerBitrateExceedsLimit", true},
+		{"VideoCodec=h264&TranscodeReasons=AudioCodecNotSupported", true},
+		{"VideoCodec=hevc&AllowVideoStreamCopy=false&TranscodeReasons=AudioCodecNotSupported", true},
+		{"VideoCodec=hevc", true},
+	} {
+		source.TranscodingUrl = "/Videos/episode/master.m3u8?" + tc.query
+		if wouldConvertHDR(source.TranscodingUrl, source) != tc.unsafe {
+			t.Fatal("HDR conversion classification failed", tc.query)
+		}
+		u, _ := url.Parse("https://example.test")
+		result, err := processMediaSource(source, &model.Movie{}, &EmbyUserCacheData{Host: u.String(), APIKey: "test"}, "episode", u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tc.unsafe && (result.IsTranscode || !strings.Contains(result.URL, "/stream.mkv")) {
+			t.Fatal("unsafe HDR stream offered")
+		}
+	}
+}
 
 func TestCompatibilityRequiresExplicitSDR(t *testing.T) {
 	for _, tc := range []struct {

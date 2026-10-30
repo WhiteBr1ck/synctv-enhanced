@@ -2,11 +2,13 @@ import Artplayer from "artplayer";
 import { parseTimedText, activeTextCues, type TextCue } from "./timed-text";
 import { trackLabel, escapeLabel, type TrackMetadata } from "@/utils/track-label";
 import { controlIcon, icon } from "./icons";
+import { resolveAssSubsetFonts } from "@/utils/ass-fonts";
 
 interface Subtitle extends TrackMetadata {
   url: string;
   type: string;
   fonts?: string[];
+  fontFiles?: { name: string }[];
 }
 interface Track extends Subtitle {
   index: number;
@@ -67,7 +69,7 @@ export function artplayerSubtitle(
     for (const event of ["video:timeupdate", "video:seeked", "ready", "restart"])
       art.on(event as any, refresh);
     const emit = (name: string, value: unknown) => art.emit(name as any, value);
-    const version = (item?: Subtitle) => JSON.stringify([item?.url || "", item?.fonts || []]);
+    const version = (item?: Subtitle) => JSON.stringify([item?.url || "", item?.fonts || [], item?.fontFiles || []]);
     const select = async (key: string, isManual = false) => {
       selected = key;
       manual ||= isManual;
@@ -138,7 +140,7 @@ export function artplayerSubtitle(
         if (art.template.$noticeInner?.textContent === loadingNotice || art.notice.show === loadingNotice) art.notice.show = "";
         clear();
         if (/^(ass|ssa)$/i.test(item.type))
-          emit("artplayer-plugin-ass:switch", { content, fonts: item.fonts || [] });
+          emit("artplayer-plugin-ass:switch", { content: resolveAssSubsetFonts(content, item.fontFiles), fonts: item.fonts || [] });
         else {
           textCues = parseTimedText(content);
           if (!textCues.length) throw new Error("字幕中没有可显示的文字");

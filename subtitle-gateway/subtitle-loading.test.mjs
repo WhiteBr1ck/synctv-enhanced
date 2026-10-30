@@ -7,7 +7,7 @@ import {stripTypeScriptTypes} from 'node:module';
 // adapter is replaced; parsing, selection, aborts and discovery run unchanged.
 let source=await readFile(new URL('../synctv-web/src/plugins/subtitle.ts',import.meta.url),'utf8');
 source=source.replace('import Artplayer from "artplayer";','const Artplayer={utils:{isMobile:false}};');
-for(const [name,path] of Object.entries({'./timed-text':'../synctv-web/src/plugins/timed-text.ts','@/utils/track-label':'../synctv-web/src/utils/track-label.ts','./icons':'../synctv-web/src/plugins/icons.ts'}))source=source.replace(`"${name}"`,JSON.stringify(new URL(path,import.meta.url).href));
+for(const [name,path] of Object.entries({'./timed-text':'../synctv-web/src/plugins/timed-text.ts','@/utils/track-label':'../synctv-web/src/utils/track-label.ts','@/utils/ass-fonts':'../synctv-web/src/utils/ass-fonts.ts','./icons':'../synctv-web/src/plugins/icons.ts'}))source=source.replace(`"${name}"`,JSON.stringify(new URL(path,import.meta.url).href));
 const {artplayerSubtitle}=await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source,{mode:'transform'})).toString('base64'));
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};

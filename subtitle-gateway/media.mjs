@@ -148,6 +148,7 @@ export class MediaStore {
         source.attachments = streams.filter(stream => stream.codec_type === 'attachment' &&
           (/^(ttf|otf)$/.test(stream.codec_name || '') || /\.(ttf|otf)$/i.test(stream.tags?.filename || ''))).slice(0, 64);
         const fonts = source.attachments.map(stream => `/_synctv/subtitles/${source.key}/font-${stream.index}`);
+        const fontFiles = source.attachments.map(stream => ({ name: stream.tags?.filename || "" }));
         source.tracks = streams.filter(stream => stream.codec_type === 'subtitle' && codecs[stream.codec_name]).map(stream => {
           const type = codecs[stream.codec_name];
           const language = stream.tags?.language || '';
@@ -155,7 +156,7 @@ export class MediaStore {
           return { index: stream.index, type, language, title,
             default: !!stream.disposition?.default, forced: !!stream.disposition?.forced,
             url: `/_synctv/subtitles/${source.key}/track-${stream.index}.${type}`,
-            fonts: type === 'ass' ? fonts : [] };
+            fonts: type === 'ass' ? fonts : [], fontFiles: type === 'ass' ? fontFiles : [] };
         });
         return source.tracks;
       }).finally(() => { source.pendingTracks = null; source.busy--; });

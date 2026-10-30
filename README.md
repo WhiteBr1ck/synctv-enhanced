@@ -4,6 +4,7 @@
 
 - AList/OpenList、Emby/Jellyfin **原片直链**自动识别内封 ASS/SSA、SRT、VTT、MP4 文字字幕。
 - ASS 使用 libass 渲染样式与字体；SRT 支持中途加载、拖动进度与语言切换。
+- ASS 字体子集代号与内封附件不一致时，根据脚本注明的原字体与附件名称恢复唯一对应关系；保留原字号、颜色、位置和时间轴，不猜测替代字体。
 - Jellyfin/Emby 集数显示 `S01E01 · 标题`，名称排序按集数自然排列；支持特别篇和合并集。
 - 播放器齿轮菜单可调字幕大小（50%–200%）、位置与 SRT 颜色，本机记住选择；ASS 保留原脚本样式与颜色，100% 恢复原始大小。
 - ASS 在全屏尺寸变化后重新绘制，缓冲和拖动期间暂停字幕时钟，恢复播放后与视频对齐；切集重新加载字幕并沿用语言选择。字幕与音轨统一显示来源、语言、格式和名称。
@@ -35,11 +36,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.17` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.18` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.17
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.17
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.18
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.18
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。

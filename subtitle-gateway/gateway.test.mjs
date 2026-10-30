@@ -98,6 +98,51 @@ async function source() {
   return discovery;
 }
 
+test('slow subtitle extraction returns polling responses and runs only once across requests', async () => {
+  const slow = createGateway({ upstream: mediaOrigin, cacheDir: path.join(temp, 'slow-cache'), subtitleWaitMs: 10 });
+  const address = `http://127.0.0.1:${await listen(slow.listener)}`;
+  const discovery = slow.store.register({ id:'slow', base:{type:'mkv',url:`${mediaOrigin}/media.mkv`,vendorInfo:{vendor:'alist'}} });
+  const url = address + discovery.replace(/tracks$/, 'track-2.srt');
+  let complete, calls = 0;
+  const pending = new Promise(resolve => { complete = resolve; });
+  slow.store.file = async () => { calls++; await pending; return path.join(temp, 'test.srt'); };
+  try {
+    for (let i=0;i<3;i++) {
+      const response = await fetch(url + (i===0?'?retry=1':''));
+      assert.equal(response.status,202);
+      assert.equal(response.headers.get('retry-after'),'1');
+      assert.equal((await response.json()).status,'processing');
+    }
+    assert.equal(calls,1,'polling must join the running extraction');
+    complete();
+    const response = await fetch(url);
+    assert.equal(response.status,200);
+    assert.match(await response.text(),/Embedded SRT OK/);
+    assert.equal(calls,1);
+  } finally { complete(); await slow.close(); }
+});
+
+test('failed background extraction stays failed until an explicit subtitle retry', async () => {
+  const slow = createGateway({ upstream: mediaOrigin, cacheDir:path.join(temp,'failed-cache'), subtitleWaitMs:10 });
+  const address = `http://127.0.0.1:${await listen(slow.listener)}`;
+  const discovery = slow.store.register({id:'failed',base:{type:'mkv',url:`${mediaOrigin}/media.mkv`,vendorInfo:{vendor:'alist'}}});
+  const url = address + discovery.replace(/tracks$/, 'track-2.srt');
+  let fail, calls=0;
+  const pending = new Promise((_,reject)=>{fail=reject;});
+  slow.store.file = async () => { if(++calls===1) return pending; return path.join(temp,'test.srt'); };
+  try {
+    assert.equal((await fetch(url)).status,202);
+    fail(new Error('test extraction failed'));
+    assert.equal((await fetch(url)).status,502);
+    assert.equal((await fetch(url)).status,502);
+    assert.equal(calls,1,'failed polls must not keep restarting FFmpeg');
+    const retry = await fetch(url+'?retry=1');
+    assert.equal(retry.status,200);
+    assert.match(await retry.text(),/Embedded SRT OK/);
+    assert.equal(calls,2);
+  } finally { await slow.close(); }
+});
+
 test('preserves authentication and rejects unknown subtitle capabilities', async () => {
   assert.equal((await fetch(origin + '/api/room/movie/current')).status, 401);
   assert.equal((await fetch(origin + '/_synctv/subtitles/' + '0'.repeat(64) + '/tracks')).status, 404);

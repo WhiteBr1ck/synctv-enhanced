@@ -31,7 +31,8 @@ export function artplayerSubtitle(
       selectedVersion = "",
       manual = false,
       disposed = false,
-      textMode = false;
+      textMode = false,
+      loading = false;
     let textCues: TextCue[] = [];
     const discoveryAbort = new AbortController();
     let selectAbort: AbortController | undefined;
@@ -73,6 +74,7 @@ export function artplayerSubtitle(
       selectAbort?.abort();
       const controller = (selectAbort = new AbortController());
       const item = items.get(key);
+      loading = !!item;
       selectedVersion = version(item);
       const clear = () => {
         textMode = false;
@@ -107,10 +109,33 @@ export function artplayerSubtitle(
         return;
       }
       try {
-        const response = await fetch(item.url, { signal: controller.signal });
-        if (!response.ok) throw new Error("字幕读取失败，请重新选择字幕");
-        const content = await response.text();
+        const deadline = Date.now() + 360000;
+        const loadingNotice = "正在提取内封字幕，请稍候…";
+        let first = true;
+        let content = "";
+        while (true) {
+          const retry = first && /\/_synctv\/subtitles\//.test(item.url);
+          first = false;
+          const url = retry ? `${item.url}${item.url.includes("?") ? "&" : "?"}retry=1` : item.url;
+          const response = await fetch(url, { signal: controller.signal });
+          if (disposed || controller.signal.aborted) return;
+          if (response.status !== 202) {
+            if (!response.ok) throw new Error("字幕读取失败，请重新选择字幕");
+            content = await response.text();
+            break;
+          }
+          if (Date.now() >= deadline) throw new Error("字幕提取等待超时，请重新选择字幕");
+          art.notice.show = loadingNotice;
+          const seconds = Number(response.headers?.get("Retry-After")) || 1;
+          await new Promise<void>((resolve, reject) => {
+            const abort = () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); };
+            const timer = setTimeout(() => { controller.signal.removeEventListener("abort", abort); resolve(); }, Math.max(0.05, Math.min(3, seconds)) * 1000);
+            controller.signal.addEventListener("abort", abort, { once: true });
+            if (controller.signal.aborted) abort();
+          });
+        }
         if (disposed || controller.signal.aborted) return;
+        if (art.template.$noticeInner?.textContent === loadingNotice || art.notice.show === loadingNotice) art.notice.show = "";
         clear();
         if (/^(ass|ssa)$/i.test(item.type))
           emit("artplayer-plugin-ass:switch", { content, fonts: item.fonts || [] });
@@ -129,6 +154,8 @@ export function artplayerSubtitle(
       } finally {
         if (selectAbort === controller) {
           selectAbort = undefined;
+          loading = false;
+          update();
           choose();
         }
       }
@@ -136,7 +163,7 @@ export function artplayerSubtitle(
     const update = () => {
       if (disposed) return;
       const selector = [...items].map(([key, item], i) => ({
-        html: escapeLabel(trackLabel(item, `字幕 ${i + 1}`)),
+        html: escapeLabel(trackLabel(item, `字幕 ${i + 1}`) + (key === selected && loading ? "（读取中）" : "")),
         key,
         default: key === selected
       }));

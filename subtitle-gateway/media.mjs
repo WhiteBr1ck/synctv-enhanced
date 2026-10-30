@@ -193,6 +193,23 @@ export class MediaStore {
     return source.pendingFiles.get(index);
   }
 
+  async prepareFile(source, index, type, retry = false) {
+    source.fileJobs ||= new Map();
+    let job = source.fileJobs.get(index);
+    if (job && ((retry && job.error) || (job.file && !await this.validFile(job.file, maxSubtitle)))) {
+      source.fileJobs.delete(index);
+      job = undefined;
+    }
+    if (!job) {
+      job = {};
+      source.fileJobs.set(index, job);
+      // Keep completion and failure available across short polling requests.
+      // A failed extraction only restarts when the viewer explicitly retries.
+      job.promise = this.file(source, index, type).then(file => { job.file = file; }, error => { job.error = error; });
+    }
+    return job;
+  }
+
   streamAudio(source, index, start, rate, req, res) {
     if (!source.audioTracks?.some(track => track.index === index)) throw new Error('音轨不存在');
     if (this.audioStreams.size >= 8) throw new Error('兼容音频连接已满，请稍后重试');

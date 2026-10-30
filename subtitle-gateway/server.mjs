@@ -21,7 +21,7 @@ function json(res, status, value) {
 }
 
 export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http://synctv:8080',
-  webDir = process.env.WEB_DIR || path.join(root, 'web'), cacheDir = process.env.CACHE_DIR || '/cache' } = {}) {
+  webDir = process.env.WEB_DIR || path.join(root, 'web'), cacheDir = process.env.CACHE_DIR || '/cache', subtitleWaitMs = 1500 } = {}) {
   const target = new URL(upstream);
   const transport = target.protocol === 'https:' ? https : http;
   const store = new MediaStore({ upstream, cacheDir });
@@ -51,7 +51,23 @@ export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http:
           return store.streamAudio(source, Number(match[6]), start, rate, req, res);
         }
         const isFont = match[5] !== undefined;
-        const file = isFont ? await store.font(source, Number(match[5])) : await store.file(source, Number(match[3]), match[4]);
+        let file;
+        if (isFont) file = await store.font(source, Number(match[5]));
+        else {
+          const retry = new URL(req.url, 'http://gateway').searchParams.get('retry') === '1';
+          const job = await store.prepareFile(source, Number(match[3]), match[4], retry);
+          if (!job.file && !job.error) {
+            let timer;
+            try { await Promise.race([job.promise, new Promise(resolve => { timer = setTimeout(resolve, subtitleWaitMs); })]); }
+            finally { clearTimeout(timer); }
+          }
+          if (job.error) throw job.error;
+          if (!job.file) {
+            res.setHeader('Retry-After', '1');
+            return json(res, 202, { status: 'processing' });
+          }
+          file = job.file;
+        }
         const info = await stat(file);
         res.writeHead(200, { 'Content-Type': isFont ? 'application/octet-stream' : 'text/plain; charset=utf-8',
           'Content-Length': info.size, 'Cache-Control': 'private, max-age=600', 'X-Content-Type-Options': 'nosniff' });

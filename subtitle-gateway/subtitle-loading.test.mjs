@@ -55,3 +55,34 @@ test('late subtitle responses cannot replace a newer selection or a destroyed ep
     assert.deepEqual(art.state.tracks.map(t=>t.content),['second ASS']);
   }finally{globalThis.fetch=originalFetch;globalThis.localStorage=originalStorage;}
 });
+
+test('a background subtitle job is polled until the actual timed text is ready',async()=>{
+  const originalFetch=globalThis.fetch,originalStorage=globalThis.localStorage;
+  globalThis.localStorage={getItem:()=>null,setItem(){}};
+  const requests=[];
+  globalThis.fetch=async url=>{requests.push(url);return requests.length===1?{status:202,ok:true,headers:{get:()=> '0.05'}}:text('1\n00:00:09,000 --> 00:00:12,000\nReady after extraction\n');};
+  const art=player();
+  try {
+    artplayerSubtitle({track:{url:'/_synctv/subtitles/test/track-2.srt',type:'srt'}})(art);
+    await new Promise(resolve=>setTimeout(resolve,100));
+    assert.deepEqual(requests,['/_synctv/subtitles/test/track-2.srt?retry=1','/_synctv/subtitles/test/track-2.srt']);
+    assert.equal(art.subtitle.show,true);
+    assert.equal(art.subtitle.activeCues[0].text,'Ready after extraction');
+    assert.equal(art.notice.show,'');
+  } finally {art.emit('destroy');globalThis.fetch=originalFetch;globalThis.localStorage=originalStorage;}
+});
+
+test('leaving an episode stops subtitle polling without showing a read error',async()=>{
+  const originalFetch=globalThis.fetch,originalStorage=globalThis.localStorage;
+  globalThis.localStorage={getItem:()=>null,setItem(){}};
+  let calls=0;
+  globalThis.fetch=async()=>{calls++;return {status:202,ok:true,headers:{get:()=> '0.05'}};};
+  const art=player();
+  try {
+    artplayerSubtitle({track:{url:'/_synctv/subtitles/test/track-2.srt',type:'srt'}})(art);
+    await tick();art.emit('destroy');
+    await new Promise(resolve=>setTimeout(resolve,100));
+    assert.equal(calls,1);
+    assert.doesNotMatch(art.notice.show,/失败|Aborted/);
+  } finally {globalThis.fetch=originalFetch;globalThis.localStorage=originalStorage;}
+});

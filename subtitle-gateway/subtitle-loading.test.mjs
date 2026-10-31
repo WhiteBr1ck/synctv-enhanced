@@ -7,6 +7,7 @@ import {stripTypeScriptTypes} from 'node:module';
 // adapter is replaced; parsing, selection, aborts and discovery run unchanged.
 let source=await readFile(new URL('../synctv-web/src/plugins/subtitle.ts',import.meta.url),'utf8');
 source=source.replace('import Artplayer from "artplayer";','const Artplayer={utils:{isMobile:false}};');
+source=source.replace('import { subtitlePicker, type FolderSubtitle } from "./subtitle-picker";', 'const subtitlePicker=(_root,_load,select)=>({open(){globalThis.pickFolderSubtitle=select;globalThis.loadFolderSubtitles=_load;},close(){}});');
 for(const [name,path] of Object.entries({'./timed-text':'../synctv-web/src/plugins/timed-text.ts','@/utils/track-label':'../synctv-web/src/utils/track-label.ts','@/utils/ass-fonts':'../synctv-web/src/utils/ass-fonts.ts','./icons':'../synctv-web/src/plugins/icons.ts'}))source=source.replace(`"${name}"`,JSON.stringify(new URL(path,import.meta.url).href));
 const {artplayerSubtitle}=await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source,{mode:'transform'})).toString('base64'));
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -85,4 +86,70 @@ test('leaving an episode stops subtitle polling without showing a read error',as
     assert.equal(calls,1);
     assert.doesNotMatch(art.notice.show,/失败|Aborted/);
   } finally {globalThis.fetch=originalFetch;globalThis.localStorage=originalStorage;}
+});
+
+test('same-folder exact matches replace the automatic track without fetching unrelated subtitles',async()=>{
+  const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage,listing=deferred(),calls=[];
+  globalThis.localStorage={getItem:()=>null,setItem(){}};
+  globalThis.fetch=async(url,options)=>{calls.push({url,headers:options?.headers});if(url==='folder')return listing.promise;if(url==='native')return text('native ASS');if(url==='exact')return text('1\n00:00:09,000 --> 00:00:12,000\nExact sidecar\n');throw Error('unrelated subtitle fetched');};
+  const art=player();
+  try{
+    artplayerSubtitle({native:{url:'native',type:'ass',origin:'embedded',default:true}},undefined,false,{url:'folder',headers:{Authorization:'room-token'}})(art);
+    await tick();assert.equal(art.state.tracks[0].content,'native ASS');
+    listing.resolve({ok:true,json:async()=>({data:{tracks:[{name:'Episode.ass',url:'exact',type:'srt',origin:'external',matchRank:2},{name:'Episode.zh.srt',url:'language',type:'srt',language:'zh',matchRank:1},{name:'Other.srt',url:'other',type:'srt',matchRank:0}]}})});
+    await tick();assert.equal(art.subtitle.activeCues[0].text,'Exact sidecar');
+    assert.deepEqual(calls.find(x=>x.url==='exact').headers,{Authorization:'room-token'});
+    assert.equal(calls.some(x=>x.url==='other'||x.url==='language'),false);
+  }finally{art.emit('destroy');globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
+});
+
+test('late folder discovery respects manual selection and disabled subtitle preference',async()=>{
+  const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage;
+  try{
+    for(const disabled of[false,true]){
+      const listing=deferred();globalThis.localStorage={getItem:()=>disabled?JSON.stringify({enabled:false}):null,setItem(){}};
+      const calls=[];globalThis.fetch=async url=>{calls.push(url);return url==='folder'?listing.promise:text('manual ASS');};
+      const art=player();
+      artplayerSubtitle({native:{url:'native',type:'ass'}},undefined,false,{url:'folder',headers:{}})(art);
+      if(!disabled)art.select('');
+      listing.resolve({ok:true,json:async()=>({tracks:[{name:'Episode.srt',url:'sidecar',type:'srt',matchRank:2}]})});
+      await tick();assert.equal(calls.includes('sidecar'),false);assert.equal(art.state.visible,false);art.emit('destroy');
+    }
+  }finally{globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
+});
+
+test('a nonmatching folder subtitle is loaded only after the user selects it',async()=>{
+  const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage;
+  const file={name:'Custom subtitle.srt',url:'custom',type:'srt',origin:'external',matchRank:0};const calls=[];
+  globalThis.localStorage={getItem:()=>null,setItem(){}};
+  globalThis.fetch=async url=>{calls.push(url);return url==='folder'?{ok:true,json:async()=>({tracks:[file]})}:text('1\n00:00:09,000 --> 00:00:12,000\nManually added\n');};
+  const art=player();
+  try{
+    artplayerSubtitle({},undefined,false,{url:'folder',headers:{}})(art);await tick();
+    assert.equal(calls.includes('custom'),false);
+    art.select('folder:add');globalThis.pickFolderSubtitle(file);await tick();
+    assert.equal(art.subtitle.activeCues[0].text,'Manually added');assert.equal(calls.includes('custom'),true);
+  }finally{art.emit('destroy');delete globalThis.pickFolderSubtitle;globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
+});
+
+test('leaving an episode aborts folder discovery and ignores the old response',async()=>{
+ const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage,listing=deferred();let signal;
+ globalThis.localStorage={getItem:()=>null,setItem(){}};
+ globalThis.fetch=(_url,options)=>{signal=options.signal;return listing.promise;};const art=player();
+ try{
+  artplayerSubtitle({},undefined,false,{url:'folder',headers:{}})(art);art.emit('destroy');assert.equal(signal.aborted,true);
+  listing.resolve({ok:true,json:async()=>({tracks:[{name:'old.ass',url:'old',type:'ass',matchRank:2}]})});await tick();
+  assert.equal(art.state.tracks.length,0);assert.equal(art.notice.show,'');
+ }finally{globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
+});
+
+test('folder read failures leave playback alone and allow a manual retry and refresh',async()=>{
+ const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage,calls=[];
+ globalThis.localStorage={getItem:()=>null,setItem(){}};
+ globalThis.fetch=async url=>{calls.push(url);return calls.length===1?{ok:false,json:async()=>({error:'Directory unavailable'})}:{ok:true,json:async()=>({tracks:[]})};};const art=player();
+ try{
+  artplayerSubtitle({},undefined,false,{url:'folder?movieId=one',headers:{}})(art);await tick();assert.equal(art.notice.show,'');
+  art.select('folder:add');assert.deepEqual(await globalThis.loadFolderSubtitles(),[]);await globalThis.loadFolderSubtitles(true);
+  assert.deepEqual(calls,['folder?movieId=one','folder?movieId=one','folder?movieId=one&refresh=1']);
+ }finally{art.emit('destroy');delete globalThis.pickFolderSubtitle;delete globalThis.loadFolderSubtitles;globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
 });

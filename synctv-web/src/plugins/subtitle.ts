@@ -3,12 +3,15 @@ import { parseTimedText, activeTextCues, type TextCue } from "./timed-text";
 import { trackLabel, escapeLabel, type TrackMetadata } from "@/utils/track-label";
 import { controlIcon, icon } from "./icons";
 import { resolveAssSubsetFonts } from "@/utils/ass-fonts";
+import { subtitlePicker, type FolderSubtitle } from "./subtitle-picker";
 
 interface Subtitle extends TrackMetadata {
   url: string;
   type: string;
   fonts?: string[];
   fontFiles?: { name: string }[];
+  headers?: Record<string, string>;
+  matchRank?: number;
 }
 interface Track extends Subtitle {
   index: number;
@@ -20,7 +23,8 @@ interface Track extends Subtitle {
 export function artplayerSubtitle(
   subtitles: Record<string, Subtitle>,
   discovery?: string,
-  preferEmbedded = false
+  preferEmbedded = false,
+  folder?: { url: string; headers: Record<string, string> }
 ) {
   return (art: Artplayer) => {
     const items = new Map<string, Subtitle>(
@@ -37,6 +41,11 @@ export function artplayerSubtitle(
       loading = false;
     let textCues: TextCue[] = [];
     const discoveryAbort = new AbortController();
+    const folderAbort = new AbortController();
+    let folderTracks: FolderSubtitle[] | undefined;
+    let folderLoading: Promise<FolderSubtitle[]> | undefined;
+    let picker: ReturnType<typeof subtitlePicker> | undefined;
+    let attachedFonts: Pick<Subtitle, "fonts" | "fontFiles"> = {};
     let selectAbort: AbortController | undefined;
     let preference: any;
     try {
@@ -119,7 +128,7 @@ export function artplayerSubtitle(
           const retry = first && /\/_synctv\/subtitles\//.test(item.url);
           first = false;
           const url = retry ? `${item.url}${item.url.includes("?") ? "&" : "?"}retry=1` : item.url;
-          const response = await fetch(url, { signal: controller.signal });
+          const response = await fetch(url, { signal: controller.signal, headers: item.headers });
           if (disposed || controller.signal.aborted) return;
           if (response.status !== 202) {
             if (!response.ok) throw new Error("字幕读取失败，请重新选择字幕");
@@ -169,9 +178,16 @@ export function artplayerSubtitle(
         key,
         default: key === selected
       }));
+      if (folder) selector.push({ html: "从同文件夹添加字幕…", key: "folder:add", default: false });
       selector.push({ html: "关闭", key: "", default: !selected });
+      const activate = (key: string) => {
+        if (key !== "folder:add") { void select(key, true); return; }
+        picker ||= subtitlePicker(art.template.$player, loadFolder, item => { void select(addFolderTrack(item), true); });
+        art.setting.show = false;
+        picker.open();
+      };
       const onSelect = (item: any) => {
-        void select(item.key, true);
+        activate(item.key);
         return controlIcon("subtitle", "字幕");
       };
       if (!Artplayer.utils.isMobile || art.fullscreen)
@@ -190,7 +206,7 @@ export function artplayerSubtitle(
         icon: icon("subtitle"),
         selector,
         onSelect: (item: any) => {
-          void select(item.key, true);
+          activate(item.key);
           return item.key ? "已选择" : "关闭";
         },
         width: 420
@@ -208,7 +224,12 @@ export function artplayerSubtitle(
         return;
       }
       const entries = [...items];
+      const matched = entries.filter(([, item]) => (item.matchRank || 0) > 0);
+      const rank = Math.max(0, ...matched.map(([, item]) => item.matchRank || 0));
+      const sameName = matched.filter(([, item]) => item.matchRank === rank);
       const match =
+        sameName.find(([, t]) => t.language === preference?.language && t.type === preference?.type) ||
+        sameName.find(([, t]) => /^(zh|chi|zho|chs|cht)/i.test(t.language || "")) || sameName[0] ||
         (preference &&
           entries.find(
             ([, t]) =>
@@ -226,10 +247,34 @@ export function artplayerSubtitle(
         entries[0];
       if (match && (match[0] !== selected || version(match[1]) !== selectedVersion)) void select(match[0]);
     };
+    const addFolderTrack = (track: FolderSubtitle) => {
+      const previous = [...items].find(([, item]) => item.origin === "external" && (item.name === track.name || item.title === track.name));
+      const key = previous?.[0] || `folder:${track.name}`;
+      items.set(key, { ...track, ...(/^(ass|ssa)$/i.test(track.type) ? attachedFonts : {}), headers: folder?.headers });
+      return key;
+    };
+    const loadFolder = (refresh = false): Promise<FolderSubtitle[]> => {
+      if (folderLoading) return folderLoading;
+      if (folderTracks && !refresh) return Promise.resolve(folderTracks);
+      if (!folder) return Promise.resolve([]);
+      const url = folder.url + (refresh ? `${folder.url.includes("?") ? "&" : "?"}refresh=1` : "");
+      folderLoading = (async () => {
+        const response = await fetch(url, { headers: folder.headers, signal: folderAbort.signal });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "读取字幕目录失败，请重试");
+        if (disposed) return [];
+        folderTracks = (result.data || result).tracks || [];
+        for (const track of folderTracks!) if (track.matchRank) addFolderTrack(track);
+        update(); choose();
+        return folderTracks!;
+      })().finally(() => { folderLoading = undefined; });
+      return folderLoading;
+    };
     update();
     // Jellyfin's existing subtitle URL is usable immediately. Probing the
     // original file (including fonts) must not hold up subtitles after a switch.
     choose();
+    if (folder) void loadFolder().catch(() => { /* Manual picker exposes errors and retry. */ });
     if (discovery)
       void (async () => {
         try {
@@ -238,6 +283,7 @@ export function artplayerSubtitle(
           const { tracks } = (await response.json()) as { tracks: Track[] };
           if (disposed) return;
           for (const track of tracks) {
+            if (track.fonts?.length) attachedFonts = { fonts: track.fonts, fontFiles: track.fontFiles };
             let metadata: Subtitle | undefined;
             let target = `embedded:${track.index}`;
             for (const [key, old] of items)
@@ -254,6 +300,7 @@ export function artplayerSubtitle(
             // adds fonts without forcing a second full scan of the movie.
             items.set(target, { ...metadata, ...track, url: metadata?.url || track.url, title, origin: "embedded" });
           }
+          for (const [key, item] of items) if (item.headers && /^(ass|ssa)$/i.test(item.type)) items.set(key, { ...item, ...attachedFonts });
           update();
           choose();
         } catch {
@@ -264,6 +311,8 @@ export function artplayerSubtitle(
     art.on("destroy", () => {
       disposed = true;
       discoveryAbort.abort();
+      folderAbort.abort();
+      picker?.close();
       selectAbort?.abort();
     });
     return { name: "artplayerSubtitle" };

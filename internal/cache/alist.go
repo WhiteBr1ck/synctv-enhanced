@@ -214,7 +214,7 @@ func NewAlistMovieCacheInitFunc(
 			return nil, err
 		}
 
-		serverID, truePath, err := getServerIDAndPath(movie, subPath)
+		serverID, truePath, err := AlistMoviePath(movie, subPath)
 		if err != nil {
 			return nil, err
 		}
@@ -287,15 +287,16 @@ func validateArgs(args *AlistMovieCacheFuncArgs, movie *model.Movie, subPath str
 	return nil
 }
 
-func getServerIDAndPath(movie *model.Movie, subPath string) (string, string, error) {
+func AlistMoviePath(movie *model.Movie, subPath string) (string, string, error) {
 	serverID, truePath, err := movie.VendorInfo.Alist.ServerIDAndFilePath()
 	if err != nil {
 		return "", "", err
 	}
 
+	truePath = path.Clean("/" + strings.TrimLeft(truePath, "/"))
 	if movie.IsFolder {
 		newPath := path.Join(truePath, subPath)
-		if !strings.HasPrefix(newPath, truePath) {
+		if newPath == truePath || (truePath != "/" && !strings.HasPrefix(newPath, truePath+"/")) {
 			return "", "", errors.New("sub path is not in parent path")
 		}
 
@@ -348,7 +349,7 @@ func processSubtitles(
 			URL:  resp.GetRawUrl(),
 			Type: utils.GetFileExtension(resp.GetName()),
 			Cache: refreshcache0.NewRefreshCache(func(ctx context.Context) ([]byte, error) {
-				return fetchSubtitleContent(ctx, resp.GetRawUrl())
+				return FetchSubtitleContent(ctx, resp.GetRawUrl())
 			}, -1),
 		}
 		cache.Subtitles = append(cache.Subtitles, subtitle)
@@ -357,7 +358,7 @@ func processSubtitles(
 	return nil
 }
 
-func fetchSubtitleContent(ctx context.Context, url string) ([]byte, error) {
+func FetchSubtitleContent(ctx context.Context, url string) ([]byte, error) {
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -381,7 +382,11 @@ func fetchSubtitleContent(ctx context.Context, url string) ([]byte, error) {
 		)
 	}
 
-	return io.ReadAll(io.LimitReader(resp.Body, subtitleMaxLength))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, subtitleMaxLength+1))
+	if len(data) > subtitleMaxLength {
+		return nil, errors.New("subtitle too large")
+	}
+	return data, err
 }
 
 func processAliProvider(

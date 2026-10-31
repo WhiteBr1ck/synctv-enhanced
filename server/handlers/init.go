@@ -197,6 +197,7 @@ func initRoom(room, needAuthUser, needAuthRoom, needAuthWithoutGuestRoom *gin.Ro
 func initMovie(movie, needAuthMovie *gin.RouterGroup) {
 	// needAuthMovie.GET("/list", MovieList)
 	needAuthMovie.GET("/current", CurrentMovie)
+	needAuthMovie.GET("/folder-subtitles", FolderSubtitles)
 
 	needAuthMovie.GET("/movies", Movies)
 

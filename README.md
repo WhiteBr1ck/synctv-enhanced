@@ -5,6 +5,7 @@
 - AList/OpenList、Emby/Jellyfin **原片直链**自动识别内封 ASS/SSA、SRT、VTT、MP4 文字字幕。
 - ASS 使用 libass 渲染样式与字体；SRT 支持中途加载、拖动进度与语言切换。
 - ASS 字体子集代号与内封附件不一致时，根据脚本注明的原字体与附件名称恢复唯一对应关系；保留原字号、颜色、位置和时间轴，不猜测替代字体。
+- AList/OpenList 可从播放器字幕菜单“从同文件夹添加字幕”搜索、选择当前视频目录内的 SRT、ASS、SSA、VTT；完整同名优先，支持 `.zh`、`.chs`、`.en` 等语言后缀自动匹配。手动选择或关闭后不被自动覆盖，切集取消旧请求。
 - Jellyfin/Emby 集数显示 `S01E01 · 标题`，名称排序按集数自然排列；支持特别篇和合并集。
 - 播放器齿轮菜单可调字幕大小（50%–200%）、位置与 SRT 颜色，本机记住选择；ASS 保留原脚本样式与颜色，100% 恢复原始大小。
 - ASS 在全屏尺寸变化后重新绘制，缓冲和拖动期间暂停字幕时钟，恢复播放后与视频对齐；切集重新加载字幕并沿用语言选择。字幕与音轨统一显示来源、语言、格式和名称。
@@ -36,11 +37,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.18` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.19` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.18
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.18
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.19
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.19
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
@@ -64,6 +65,7 @@ Actions 配置构建 `linux/amd64` 与 `linux/arm64`。
 - AList/OpenList 目录及当前目录搜索保留创建时间与修改时间；索引搜索的时间字段取决于上游。
 - Emby/Jellyfin 目录提供名称、类型及来源创建时间排序；Jellyfin 标准目录接口没有返回文件修改时间时，该项显示“无数据”。创建时间沿用媒体服务器的 DateCreated 定义。
 - AList 上游未提供索引搜索时，自动搜索当前目录（最多 10000 项），界面显示搜索范围；不会递归扫描整个网盘。
+- 同目录字幕仅在 AList/OpenList 入口提供，使用当前播放文件的实际目录，不受下方列表浏览位置影响。目录读取独立进行，不阻塞视频；只读取选中或同名匹配的字幕内容。Jellyfin/Emby 沿用媒体服务器已关联的外挂字幕，普通视频直链不提供目录浏览。
 - Jellyfin/Emby 返回 ASS/SSA 时直接请求 ASS，避免经过 SRT 丢失样式；原文件可读取时自动提取内封字幕和附件字体（最多 64 个）；字体从文件头单独读取，Jellyfin 已有的 ASS 不再为补充字体而重新扫描整部视频。
 - PGS/VobSub 图片字幕不在本版文字字幕范围内；AList/OpenList 与普通直链暂不提供视频转码。
 - HDR 使用浏览器原生播放链路，不增加 HDR→SDR 转换；实际输出取决于浏览器、系统和显示设备。

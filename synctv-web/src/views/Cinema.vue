@@ -207,13 +207,18 @@ const playerOption = computed<options>(() => {
     );
   }
 
-  if (room.currentMovie.base!.subtitles || room.currentMovie.base!.embeddedSubtitleSource) {
+  const folderSubtitles = room.currentMovie.base!.vendorInfo?.vendor === "alist" ? {
+    url: "/api/room/movie/folder-subtitles?" + new URLSearchParams({ movieId: room.currentMovie.id, subPath: room.currentMovie.subPath || "" }),
+    headers: { Authorization: token.value, "X-Room-Id": roomID.value }
+  } : undefined;
+  if (room.currentMovie.base!.subtitles || room.currentMovie.base!.embeddedSubtitleSource || folderSubtitles) {
     option.plugins!.push(artplayerPluginAss({}));
     option.plugins!.push(artplayerSubtitleStyle());
     option.plugins!.push(artplayerSubtitle(
       Object.assign({}, room.currentMovie.base!.subtitles),
       room.currentMovie.base!.embeddedSubtitleSource,
-      room.currentMovie.base!.preferEmbeddedSubtitles
+      room.currentMovie.base!.preferEmbeddedSubtitles,
+      folderSubtitles
     ));
   }
 

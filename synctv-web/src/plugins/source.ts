@@ -52,6 +52,8 @@ export function artplayPluginSource(sources: artplayPluginSource[]) {
       const oldSource = newSources.find((v) => v.html === currentSourceName);
       if (oldSource) {
         onSelect(oldSource);
+      } else {
+        art.emit('synctv:sources' as any);
       }
     };
     setSelector(sources);

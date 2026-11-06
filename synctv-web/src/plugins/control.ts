@@ -263,6 +263,7 @@ export default function artplayerPluginMediaControl() {
     }
 
     function update() {
+      if (art.isDestroy) return;
       const provider = getProvider();
 
       updateQualityControl(provider);
@@ -272,6 +273,10 @@ export default function artplayerPluginMediaControl() {
     art.on("ready", update);
     art.on("restart", update);
     art.on('synctv:sources' as any,update);
+
+    // Source plugins are installed later in the same constructor. Show their
+    // alternatives before canplay so an unsupported default can be replaced.
+    queueMicrotask(update);
 
     if (isMobile) {
       art.on("fullscreen", update);

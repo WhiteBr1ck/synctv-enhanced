@@ -16,6 +16,7 @@
 - 聊天位于底部时跟随新消息；阅读旧消息时保留位置，点击新消息提示可返回底部。播放器弹幕发送成功后清空输入。
 - 目录面包屑使用媒体服务器按用户返回的层级，保留媒体库、剧集和季；每个房间分别记住目录、分页和搜索，刷新后恢复。
 - 播放器内顶部显示当前影片名称，画质、音轨、字幕、同步和相关设置采用独立图标，切换字幕和更新菜单时保持按钮顺序。
+- 有可选播放源时，画质菜单在视频就绪前显示；默认流无法解码或仍在缓冲时，也能直接切换原画或 H.264 兼容。手机端通过齿轮菜单选择，普通 member 无需额外权限。
 - 播放器右键“统计信息”保留原版内容，新增部分显示实际视频及窗口分辨率、帧率、解码格式、视频直通或转码、色深、音频格式与处理方式、网速（HTTP 与 P2P 下载总速度及上传速度）、缓冲、缓冲等待、最近同步跳转和 SDR/HDR。无法取得的字段显示 `—`。
 - MP4/MKV 原文件提供内封音轨选择；浏览器不支持默认音频编码时，自动启用 AAC 立体声兼容音频，视频仍按原文件播放。
 - Jellyfin 播放请求统一使用 120 Mbps 上限，避免旧的 8 Mbps 限制让高码率原片意外转码；HDR 自动路线只允许视频复制，拒绝视频重编码。
@@ -37,11 +38,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.19` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.20` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.19
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.19
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.20
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.20
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。

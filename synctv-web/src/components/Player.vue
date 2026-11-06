@@ -16,6 +16,7 @@ import P2PEngineMedia, {
   type TrackerZone as TrackerZoneMedia
 } from "@swarmcloud/media";
 import {escapeLabel} from '@/utils/track-label';
+import artplayerPluginDanmukuInput, { playerFullscreenOptions } from "@/plugins/danmuku-input";
 import '@/plugins/player-ui.css';
 
 const watchers: WatchStopHandle[] = [];
@@ -369,18 +370,16 @@ const newPlayerOption = (html: HTMLDivElement): Option => {
     hotkey: true, // 快捷键
     pip: true, // 显示画中画按钮
     mutex: true, // 互斥，阻止多个播放器同时播放
-    fullscreen: true, // 全屏按钮
-    fullscreenWeb: true, // 网页全屏
+    ...playerFullscreenOptions(),
     subtitleOffset: true, // 显示字幕偏移功能
     miniProgressBar: true, // 迷你进度条,播放器失去焦点后且正在播放时出现
     playsInline: true, // 在移动端是否使用 playsInline 模式
     lock: true, // 移动端显示锁定按钮
     fastForward: true, // 移动端添加长按视频快进功能
     autoPlayback: false, // 使用自动回放功能
-    autoOrientation: true, // 移动端的网页全屏时，根据视频尺寸和视口尺寸，旋转播放器
     airplay: false, // 隔空播放
     type: Props.options.type,
-    plugins: Props.options.plugins,
+    plugins: [...(Props.options.plugins || []), artplayerPluginDanmukuInput()],
     layers:Props.options.title?[{name:'movie-title',html:escapeLabel(Props.options.title)}]:[],
     subtitle: {
       encoding: "utf-8",

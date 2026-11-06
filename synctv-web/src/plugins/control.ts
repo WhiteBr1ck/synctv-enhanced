@@ -235,7 +235,7 @@ export default function artplayerPluginMediaControl() {
       }
 
       const updateControls = () => {
-        if (!isMobile || art.fullscreen) {
+        if (!isMobile || art.fullscreen || art.fullscreenWeb) {
           art.controls.update({
             name,
             position: "right",
@@ -280,6 +280,7 @@ export default function artplayerPluginMediaControl() {
 
     if (isMobile) {
       art.on("fullscreen", update);
+      art.on("fullscreenWeb", update);
     }
 
     return {

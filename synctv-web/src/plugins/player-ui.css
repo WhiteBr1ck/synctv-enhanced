@@ -89,3 +89,44 @@
   background: #2563eb;
   font-size: 13px;
 }
+.art-video-player.synctv-danmuku-editing .art-bottom {
+  opacity: 1;
+}
+.art-video-player.synctv-danmuku-editing .art-controls,
+.art-video-player.synctv-danmuku-editing .art-progress {
+  transform: translateY(0);
+}
+.art-video-player.synctv-apple-touch .apd-input {
+  font-size: 16px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.art-video-player.synctv-apple-touch.art-fullscreen-web {
+  --art-control-height: 44px;
+  --art-control-icon-scale: 1;
+  --art-bottom-height: 170px;
+}
+.art-video-player.synctv-apple-touch.art-fullscreen-web .art-bottom {
+  bottom: var(--synctv-keyboard-inset, 0px);
+  height: auto;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  transition-property: opacity;
+}
+.art-video-player.synctv-apple-touch.art-fullscreen-web .art-controls-center {
+  flex: 0;
+  padding: 0;
+}
+.art-video-player.synctv-apple-touch.art-fullscreen-web .artplayer-plugin-danmuku {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--art-control-height) + 18px);
+  height: 44px;
+  gap: 12px;
+  padding: 0 6px;
+}
+.art-video-player.synctv-apple-touch.art-fullscreen-web .apd-emitter {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}

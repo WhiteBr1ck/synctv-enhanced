@@ -29,7 +29,10 @@ function player(initial = sources) {
   const status = {currentTime:123, isPlaying:true, playbackRate:1};
   const art = {
     isDestroy:false, fullscreen:false, option:{type:'m3u8'}, url:initial[0]?.url,
-    controls:{update:item=>controls.set(item.name,item), remove:name=>controls.delete(name)},
+    controls:{
+      update:item=>{art.controls[item.name]=item;controls.set(item.name,item);},
+      remove:name=>{delete art.controls[name];controls.delete(name);}
+    },
     setting:{update:item=>settings.set(item.name,item), find:name=>settings.get(name), remove:name=>settings.delete(name)},
     loading:{show:false}, notice:{show:''},
     plugins:{syncPlugin:{currentStatus:()=>status, setAndNoPublishStatus:value=>{art.restored=value;}}},
@@ -87,6 +90,20 @@ test('mobile settings expose quality before ready and fullscreen adds the toolba
     assert.equal(settings.get('quality')?.selector.length,3);
     art.fullscreen=true; art.emit('fullscreen');
     assert.equal(controls.get('quality')?.selector.length,3);
+  } finally { art.isDestroy=true; art.emit('destroy'); setMobile(false); }
+});
+
+test('iPad web fullscreen keeps quality choices in the toolbar and settings', async () => {
+  setMobile(true);
+  const {art, controls, settings} = player();
+  try {
+    await tick();
+    art.fullscreenWeb=true; art.emit('fullscreenWeb',true);
+    assert.equal(controls.get('quality')?.selector.length,3);
+    assert.equal(settings.get('quality')?.selector.length,3);
+    art.fullscreenWeb=false; art.emit('fullscreenWeb',false);
+    assert.equal(controls.has('quality'),false);
+    assert.equal(settings.get('quality')?.selector.length,3);
   } finally { art.isDestroy=true; art.emit('destroy'); setMobile(false); }
 });
 

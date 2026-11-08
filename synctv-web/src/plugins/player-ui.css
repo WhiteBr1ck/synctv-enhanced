@@ -303,6 +303,13 @@
 .synctv-follow-status[hidden] {
   display: none;
 }
+.art-video-player:is(.art-fullscreen, .art-fullscreen-web):not(.art-control-show):not(
+    .synctv-danmuku-editing
+  )
+  .synctv-follow-status {
+  opacity: 0;
+  visibility: hidden;
+}
 .art-video-player.synctv-playback-readonly .art-progress {
   cursor: default;
 }

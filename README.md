@@ -43,11 +43,11 @@ docker compose up -d
 ```
 
 访问 `http://服务器地址:8080`，端口通过 `.env` 中的 `SYNCTV_PORT` 修改。
-固定版本 `0.9.15-enhanced.24` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
+固定版本 `0.9.15-enhanced.25` 的两个镜像名称如下；发布状态以 Actions 和 Packages 为准。
 
 ```text
-ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.24
-ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.24
+ghcr.io/whitebr1ck/synctv-enhanced:0.9.15-enhanced.25
+ghcr.io/whitebr1ck/synctv-enhanced-subtitles:0.9.15-enhanced.25
 ```
 
 Actions 配置构建 `linux/amd64` 与 `linux/arm64`。

@@ -32,6 +32,13 @@ func Init(d *gorm.DB, t conf.DatabaseType) error {
 	if err := db.AutoMigrate(&model.ChatMessage{}); err != nil {
 		return err
 	}
+	// Enhanced fields must also migrate when the upstream schema version is
+	// already current. Add just this column so existing room data is preserved.
+	if !db.Migrator().HasColumn(&model.RoomSettings{}, "OwnerControl") {
+		if err := db.Migrator().AddColumn(&model.RoomSettings{}, "OwnerControl"); err != nil {
+			return err
+		}
+	}
 
 	err = initGuestUser()
 	if err != nil {

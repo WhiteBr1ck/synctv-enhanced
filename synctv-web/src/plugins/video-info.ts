@@ -4,6 +4,7 @@ import type { VideoInfo } from "@/utils/video-info";
 import { playbackSummary } from "@/utils/playback-summary";
 import { TransferMeter, formatTransferRate, type TransferTotals } from "@/utils/transfer-meter";
 import "./video-info.css";
+import { icon } from "./icons";
 
 interface ProbeInfo {
   video?: VideoInfo | null;
@@ -14,6 +15,26 @@ interface ProbeInfo {
 export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
   return (art: Artplayer) => {
     const transfer = new TransferMeter();
+    const speedBadge = document.createElement("div");
+    speedBadge.className = "synctv-network-speed";
+    speedBadge.setAttribute("aria-label", "实时下载速度");
+    art.template.$player.append(speedBadge);
+    const preference = "synctv-network-speed";
+    let showSpeed = art.storage.get(preference) !== false;
+    speedBadge.hidden = !showSpeed;
+    art.setting.add({
+      name: "network-speed",
+      html: "常驻网速",
+      icon: icon("network"),
+      switch: showSpeed,
+      onSwitch: () => {
+        showSpeed = !showSpeed;
+        speedBadge.hidden = !showSpeed;
+        art.storage.set(preference, showSpeed);
+        refreshNetwork();
+        return showSpeed;
+      }
+    });
     art.on("synctv:network" as any, (totals: TransferTotals) => transfer.update(totals));
     art.on("synctv:network-reset" as any, () => transfer.reset());
     let context = initialContext,
@@ -77,6 +98,13 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       const row = rows.get(key)!;
       if (row.textContent !== value) row.textContent = value;
     };
+    const refreshNetwork = () => {
+      const speed = transfer.rates();
+      const download = speed ? formatTransferRate(speed.download) : "—";
+      speedBadge.textContent = `↓ ${download}`;
+      set("network", speed ? `↓ ${download} · ↑ ${formatTransferRate(speed.upload)}` : "—");
+    };
+    const networkTimer = setInterval(refreshNetwork, 1000);
     const refresh = () => {
       if (disposed) return;
       const video = art.video;
@@ -109,8 +137,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       set("depth", summary.depth ? `${summary.depth} bit` : "—");
       set("audio", summary.audio);
       set("range", summary.dynamicRange);
-      const speed = transfer.rates();
-      set("network", speed ? `↓ ${formatTransferRate(speed.download)} · ↑ ${formatTransferRate(speed.upload)}` : "—");
+      refreshNetwork();
       let ahead = 0;
       for (let i = 0; i < video.buffered.length; i++)
         if (
@@ -151,6 +178,8 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       disposed = true;
       request?.abort();
       clearInterval(timer);
+      clearInterval(networkTimer);
+      speedBadge.remove();
       section.remove();
     });
     refresh();

@@ -360,7 +360,7 @@ const newPlayerOption = (html: HTMLDivElement): Option => {
     url: Props.options.url,
     isLive: Props.options.isLive,
     container: html,
-    volume: 0.3, // 音量
+    volume: 1, // 默认音量；用户主动调节后仍保留其音量记忆
     autoSize: false, // 隐藏黑边
     autoMini: false,
     theme: "#00a1d6",

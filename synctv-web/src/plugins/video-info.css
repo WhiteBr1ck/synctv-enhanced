@@ -25,7 +25,11 @@
   min-width: 0;
   flex: 1;
 }
-.art-video-player .art-info.synctv-video-info .art-info-panel .synctv-video-info-extra .art-info-content {
+.art-video-player
+  .art-info.synctv-video-info
+  .art-info-panel
+  .synctv-video-info-extra
+  .art-info-content {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
@@ -37,4 +41,21 @@
   max-width: 355px;
   line-height: 1.5;
   opacity: 0.75;
+}
+.art-video-player .synctv-network-speed {
+  position: absolute;
+  z-index: 40;
+  top: 44px;
+  right: 14px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #101827a8;
+  color: #fff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+}
+.art-video-player .synctv-network-speed[hidden] {
+  display: none;
 }

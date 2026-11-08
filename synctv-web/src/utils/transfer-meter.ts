@@ -4,9 +4,9 @@ export interface TransferTotals {
   totalP2PUploaded: number;
 }
 
-// SwarmCloud reports cumulative KiB, including HTTP traffic with P2P disabled.
-// Measure both transports over a short window; a cached video can legitimately
-// play at zero network speed once downloads stop.
+// SwarmCloud reports observed transfers in cumulative KiB. Native direct media
+// can bypass the engine (for example with P2P disabled) and supply no statistics.
+// A cached video can legitimately play at zero speed once downloads stop.
 export class TransferMeter {
   private samples: { at: number; download: number; upload: number }[] = [];
   private observed = false;

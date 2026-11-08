@@ -109,7 +109,7 @@ export function artplayerLayout(theater: { active: () => boolean; toggle: () => 
     const danmukuButtons = [
       [".apd-toggle-on", "danmuku"],
       [".apd-toggle-off", "danmukuOff"],
-      [".apd-config > svg", "settings"],
+      [".apd-config > svg", "danmukuSettings"],
       [".apd-style > svg", "color"]
     ] as const;
     mountDanmuku();
@@ -142,6 +142,7 @@ export function artplayerLayout(theater: { active: () => boolean; toggle: () => 
       element.setAttribute("role", "button");
       element.setAttribute("tabindex", "0");
       element.setAttribute("aria-label", label);
+      element.setAttribute("title", label);
       if (selector !== ".apd-toggle")
         listen(element, "click", (event) => {
           if ((event.target as Element)?.closest(".apd-config-panel,.apd-style-panel")) return;
@@ -268,12 +269,35 @@ export function artplayerLayout(theater: { active: () => boolean; toggle: () => 
         art.controls.setting.click();
       }
     });
+    // Each submenu starts at its header, independently of the previous menu's
+    // scroll position (the root menu can be much taller than its submenus).
+    const settings = art.template.$setting;
+    let activePanel: Element | null = null;
+    const menuObserver = new MutationObserver(() => {
+      const next = settings.querySelector(".art-setting-panel.art-current");
+      if (next !== activePanel) {
+        activePanel = next;
+        settings.scrollTop = 0;
+      }
+    });
+    menuObserver.observe(settings, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class"]
+    });
     const layoutSize = () => {
       if (destroyed) return;
       $player.classList.toggle("synctv-compact", $player.clientWidth < 820);
       $player.style.setProperty(
         "--synctv-danmuku-panel-height",
         `${Math.max(100, $player.clientHeight - ($player.clientWidth < 820 ? 130 : 90))}px`
+      );
+      const menuBottom = $player.clientWidth < 820 ? 102 : 66;
+      $player.style.setProperty("--synctv-menu-bottom", `${menuBottom}px`);
+      $player.style.setProperty(
+        "--synctv-menu-height",
+        `${Math.max(48, $player.clientHeight - menuBottom - 12)}px`
       );
       art.emit("resize");
     };
@@ -299,6 +323,7 @@ export function artplayerLayout(theater: { active: () => boolean; toggle: () => 
       destroyed = true;
       native.destroy();
       observer.disconnect();
+      menuObserver.disconnect();
       removers.forEach((remove) => remove());
       art.off("video:volumechange", volume);
       art.off("info", infoState);

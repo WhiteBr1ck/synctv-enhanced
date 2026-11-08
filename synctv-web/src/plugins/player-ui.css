@@ -273,12 +273,19 @@
   accent-color: #4e8cff;
 }
 .art-video-player.synctv-unified-player .art-settings {
-  max-height: 70%;
+  height: auto !important;
+  max-height: var(--synctv-menu-height, calc(100% - 78px));
+  bottom: calc(var(--synctv-menu-bottom, 66px) + var(--synctv-keyboard-inset, 0px));
+  transition-property: opacity, width;
   border: 1px solid #ffffff20;
   border-radius: 12px;
 }
+.art-video-player.synctv-unified-player .art-setting-panel {
+  flex-shrink: 0;
+}
 .art-video-player.synctv-unified-player .art-setting-item {
   min-height: 42px !important;
+  flex-shrink: 0;
 }
 .synctv-follow-status {
   position: absolute;

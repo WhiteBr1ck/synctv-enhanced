@@ -250,7 +250,8 @@ export const newSyncPlugin =
       event.stopImmediatePropagation();
     };
     const blockGesture = (event: TouchEvent) => {
-      if (restricted() && event.touches.length === 1) blockSeek(event);
+      // Stop Artplayer's seek gesture without cancelling the browser's scroll.
+      if (restricted() && event.touches.length === 1) event.stopImmediatePropagation();
     };
     const blockKeys = (event: KeyboardEvent) => {
       const target = event.target as Element | null;

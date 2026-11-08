@@ -113,6 +113,19 @@ test('viewer progress is read-only and restoring a local quality switch preserve
  }finally{f.destroy();}
 });
 
+test('viewer swipe blocks seek handlers but preserves native page scrolling',()=>{
+ const f=fixture();let sought=false;
+ try{
+  f.art.video.addEventListener('touchmove',()=>{sought=true;});
+  const swipe=new Event('touchmove',{cancelable:true});Object.defineProperty(swipe,'touches',{value:[{}]});
+  f.art.video.dispatchEvent(swipe);
+  assert.equal(sought,false);assert.equal(swipe.defaultPrevented,false);
+  f.access.canControlPlayback=true;
+  const allowed=new Event('touchmove',{cancelable:true});Object.defineProperty(allowed,'touches',{value:[{}]});
+  f.art.video.dispatchEvent(allowed);assert.equal(sought,true);
+ }finally{f.destroy();}
+});
+
 test('permission changes cancel queued publications and restore interactive controls',async t=>{
  t.mock.timers.enable({apis:['setTimeout']});
  const f=fixture({ownerControl:false,canControlPlayback:true});

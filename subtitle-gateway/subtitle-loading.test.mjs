@@ -14,15 +14,15 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
 const text=value=>({ok:true,text:async()=>value});
 function player(){
-  const events=new Map(),controls=new Map(),state={visible:false,tracks:[]};
+  const events=new Map(),controls=new Map(),settings=new Map(),state={visible:false,tracks:[]};
   const subtitle=Object.create({get cues(){return [];},get activeCues(){return [];}});
   Object.assign(subtitle,{show:false,update(){}});
-  return {state,controls: {update:v=>controls.set(v.name,v)},setting:{update(){}},subtitle,
+  return {state,controls: {update:v=>controls.set(v.name,v)},setting:{update:v=>settings.set(v.name,v)},subtitle,
     template:{$subtitle:{textContent:'',classList:{toggle(){}}}},
     on:(name,callback)=>events.set(name,[...(events.get(name)||[]),callback]),
     emit(name,value){if(name==='artplayer-plugin-ass:visible')state.visible=value;if(name==='artplayer-plugin-ass:switch'){state.visible=true;state.tracks.push(value);}for(const cb of events.get(name)||[])cb(value);},
     notice:{show:''},currentTime:10,subtitleOffset:0,
-    select:key=>controls.get('subtitle').onSelect({key})};
+    select:key=>settings.get('subtitle').onSelect({key})};
 }
 
 test('episode subtitles start before discovery and add fonts without scanning the original movie again',async()=>{

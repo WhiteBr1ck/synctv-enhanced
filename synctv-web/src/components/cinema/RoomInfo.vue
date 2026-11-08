@@ -91,6 +91,10 @@ const goToLogin = () => router.push("/login");
             </td>
           </tr>
           <tr>
+            <td>房主</td>
+            <td>{{ props.info.creator }}</td>
+          </tr>
+          <tr>
             <td>分享链接</td>
             <td>
               <div class="overflow-hidden flex text-ellipsis max-w-[150px]">

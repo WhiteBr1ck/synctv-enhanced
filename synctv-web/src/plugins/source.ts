@@ -11,7 +11,8 @@ interface artplayPluginSource {
 const switchSource = (art: Artplayer, source: artplayPluginSource) => {
   const status = art.plugins["syncPlugin"].currentStatus();
   const restore = () => {
-    art.plugins["syncPlugin"].setAndNoPublishStatus(status);
+    const sync=art.plugins["syncPlugin"];
+    (sync.restoreLocalStatus || sync.setAndNoPublishStatus)(status);
     art.emit("restart", source.url);
   };
   art.once("video:canplay", restore);

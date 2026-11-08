@@ -117,7 +117,7 @@ export const useSettings = () => {
     ["can_edit_movie", { value: false, name: "允许用户编辑影片" }],
     ["can_delete_movie", { value: false, name: "允许用户删除影片" }],
     ["can_set_current_movie", { value: false, name: "允许用户切换影片" }],
-    ["can_set_current_status", { value: false, name: "是否可以上报进度" }],
+    ["can_set_current_status", { value: false, name: "允许成员控制播放" }],
     ["can_send_chat_message", { value: false, name: "是否允许聊天 / 发送弹幕" }]
   ]);
 

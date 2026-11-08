@@ -101,32 +101,278 @@
   -webkit-user-select: text;
   user-select: text;
 }
-.art-video-player.synctv-apple-touch.art-fullscreen-web {
-  --art-control-height: 44px;
+
+.art-video-player.synctv-unified-player {
+  --art-control-height: 42px;
+  --art-control-icon-size: 24px;
   --art-control-icon-scale: 1;
-  --art-bottom-height: 170px;
+  --art-control-opacity: 0.9;
+  --art-bottom-height: 160px;
+  --art-padding: 12px;
+  container-type: inline-size;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Microsoft YaHei",
+    sans-serif;
 }
-.art-video-player.synctv-apple-touch.art-fullscreen-web .art-bottom {
-  bottom: var(--synctv-keyboard-inset, 0px);
+.art-video-player.synctv-unified-player .art-bottom {
   height: auto;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  bottom: var(--synctv-keyboard-inset, 0px);
+  padding: 24px 12px max(8px, env(safe-area-inset-bottom));
   transition-property: opacity;
 }
-.art-video-player.synctv-apple-touch.art-fullscreen-web .art-controls-center {
-  flex: 0;
+.art-video-player.synctv-unified-player .art-controls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  height: auto;
+  min-height: 42px;
+}
+.art-video-player.synctv-unified-player .art-controls-left,
+.art-video-player.synctv-unified-player .art-controls-right {
+  align-items: center;
+  margin: 0;
+}
+.art-video-player.synctv-unified-player .art-controls-center {
+  display: flex;
+  min-width: 0;
   padding: 0;
+  height: 42px;
 }
-.art-video-player.synctv-apple-touch.art-fullscreen-web .artplayer-plugin-danmuku {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--art-control-height) + 18px);
-  height: 44px;
-  gap: 12px;
-  padding: 0 6px;
+.art-video-player.synctv-unified-player .art-control {
+  min-width: 36px;
+  padding: 0 5px;
+  border-radius: 8px;
 }
-.art-video-player.synctv-apple-touch.art-fullscreen-web .apd-emitter {
+.art-video-player.synctv-unified-player .art-control:hover {
+  background: #ffffff14;
+}
+.art-video-player.synctv-unified-player .art-control-time {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.art-video-player.synctv-unified-player .synctv-danmuku-strip {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+}
+.art-video-player.synctv-unified-player .art-controls-center .artplayer-plugin-danmuku {
+  display: flex;
+  height: 42px;
+  width: 100%;
+  gap: 8px;
+  min-width: 0;
+}
+.art-video-player.synctv-unified-player .art-controls-center .apd-emitter {
   width: auto;
   min-width: 0;
   flex: 1;
+  border-radius: 8px;
+  border: 1px solid #ffffff20;
+  background: #18202cbf;
+  height: 36px;
+}
+.art-video-player.synctv-unified-player .apd-input {
+  font-size: 16px;
+  line-height: normal;
+  padding: 0 6px;
+  min-width: 0;
+}
+.art-video-player.synctv-unified-player .apd-style[hidden] {
+  display: none;
+}
+.synctv-danmuku-style-settings {
+  border-top: 1px solid #ffffff25;
+  padding: 10px 0 0;
+  margin-top: 10px;
+}
+.synctv-danmuku-style-settings .apd-colors {
+  gap: 10px;
+}
+.synctv-danmuku-style-settings .apd-color {
+  width: 22px;
+  height: 22px;
+}
+.art-video-player.synctv-unified-player .apd-input::placeholder {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.art-video-player.synctv-unified-player .apd-send {
+  width: 48px;
+  background: #3676e8;
+  border-radius: 0 7px 7px 0;
+  font-size: 12px;
+}
+.art-video-player.synctv-unified-player .apd-icon {
+  width: 22px !important;
+  height: 22px !important;
+  opacity: 1;
+}
+.art-video-player.synctv-unified-player .apd-toggle,
+.art-video-player.synctv-unified-player .apd-config,
+.art-video-player.synctv-unified-player .apd-style {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 36px;
+}
+.art-video-player.synctv-unified-player .apd-config-panel,
+.art-video-player.synctv-unified-player .apd-style-panel {
+  bottom: 34px !important;
+  padding: 8px 0 !important;
+  max-width: calc(100vw - 32px);
+}
+.art-video-player.synctv-unified-player .apd-config-panel-inner,
+.art-video-player.synctv-unified-player .apd-style-panel-inner {
+  max-height: 50vh;
+  overflow-y: auto;
+  border: 1px solid #ffffff20;
+  border-radius: 10px !important;
+  background: #151b28f5 !important;
+}
+.art-video-player.synctv-unified-player .synctv-panel-open > .apd-config-panel,
+.art-video-player.synctv-unified-player .synctv-panel-open > .apd-style-panel {
+  opacity: 1;
+  pointer-events: auto;
+}
+.art-video-player.synctv-unified-player .art-control-volume {
+  position: relative;
+}
+.art-video-player.synctv-unified-player .art-control-volume > .art-icon,
+.art-video-player.synctv-unified-player .art-volume-panel {
+  display: none !important;
+}
+.art-video-player.synctv-unified-player .synctv-mute {
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 6px;
+  cursor: pointer;
+}
+.art-video-player.synctv-unified-player .synctv-volume-panel {
+  display: none;
+  position: absolute;
+  bottom: 38px;
+  left: 0;
+  padding: 14px;
+  background: #151b28f5;
+  border: 1px solid #ffffff20;
+  border-radius: 8px;
+}
+.art-video-player.synctv-unified-player .art-control-volume:focus-within .synctv-volume-panel,
+.art-video-player.synctv-unified-player .art-control-volume:hover .synctv-volume-panel {
+  display: block;
+}
+.synctv-volume-panel input {
+  width: 110px;
+  accent-color: #4e8cff;
+}
+.art-video-player.synctv-unified-player .art-settings {
+  max-height: 70%;
+  border: 1px solid #ffffff20;
+  border-radius: 12px;
+}
+.art-video-player.synctv-unified-player .art-setting-item {
+  min-height: 42px !important;
+}
+.synctv-follow-status {
+  position: absolute;
+  z-index: 45;
+  top: 42px;
+  left: 14px;
+  padding: 4px 8px;
+  border: 1px solid #ffffff26;
+  background: #101827b8;
+  color: #dbeafe;
+  border-radius: 5px;
+  font-size: 12px;
+  pointer-events: none;
+}
+.synctv-follow-status[hidden] {
+  display: none;
+}
+.art-video-player.synctv-playback-readonly .art-progress {
+  cursor: default;
+}
+.art-video-player.synctv-playback-readonly .art-progress-indicator {
+  display: none;
+}
+.art-video-player.synctv-playback-readonly .art-setting-item[data-name="playback-rate"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.art-video-player.synctv-unified-player.synctv-compact .art-controls {
+  grid-template-columns: auto auto;
+  gap: 2px 6px;
+}
+.art-video-player.synctv-unified-player.synctv-compact .art-controls-center {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.art-video-player.synctv-unified-player.synctv-compact .art-controls-right {
+  justify-content: flex-end;
+}
+.art-video-player.synctv-unified-player.synctv-compact .art-control {
+  min-width: 32px;
+  padding: 0 3px !important;
+}
+.art-video-player.synctv-unified-player.synctv-compact .art-control-time {
+  padding: 0 3px;
+  font-size: 11px;
+}
+.art-video-player.synctv-unified-player.synctv-compact .artplayer-plugin-danmuku {
+  gap: 8px;
+}
+.art-video-player.synctv-unified-player :focus-visible {
+  outline: 2px solid #75a7ff;
+  outline-offset: 2px;
+}
+@media (hover: none) {
+  .art-video-player.synctv-unified-player .apd-config:not(.synctv-panel-open) > .apd-config-panel,
+  .art-video-player.synctv-unified-player .apd-style:not(.synctv-panel-open) > .apd-style-panel {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.art-video-player.synctv-unified-player .art-bottom {
+  inset: auto 0 var(--synctv-keyboard-inset, 0px);
+  min-height: 0;
+  overflow: visible;
+}
+.art-video-player.synctv-unified-player .art-controls-left,
+.art-video-player.synctv-unified-player .art-controls-right {
+  height: 42px;
+}
+.art-video-player.synctv-unified-player.art-control-show .art-subtitle {
+  bottom: calc(64px + var(--art-subtitle-bottom));
+}
+.art-video-player.synctv-unified-player.synctv-compact.art-control-show .art-subtitle {
+  bottom: calc(108px + var(--art-subtitle-bottom));
+}
+.art-video-player.synctv-unified-player .synctv-danmuku-style-settings {
+  padding: 10px 0 0 !important;
+  border: 0;
+  border-top: 1px solid #ffffff25 !important;
+  background: transparent !important;
+}
+.art-video-player.synctv-unified-player:not(.art-control-show):not(.synctv-danmuku-editing)
+  .art-bottom {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.art-video-player.synctv-unified-player.synctv-compact .art-bottom {
+  padding: 8px 10px 4px;
+}
+.art-video-player.synctv-unified-player .apd-config-panel-inner {
+  max-height: min(50vh, var(--synctv-danmuku-panel-height, 300px));
+}
+.art-video-player.synctv-unified-player .synctv-volume-panel.synctv-volume-open {
+  display: block;
 }

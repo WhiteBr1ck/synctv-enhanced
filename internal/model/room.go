@@ -82,6 +82,7 @@ type RoomSettings struct {
 	JoinNeedReview         bool                 `gorm:"default:false"            json:"join_need_review"`
 	DisableJoinNewUser     bool                 `gorm:"default:false"            json:"disable_join_new_user"`
 	Hidden                 bool                 `gorm:"default:false"            json:"hidden"`
+	OwnerControl           bool                 `gorm:"not null;default:false"   json:"owner_control"`
 	CanGetMovieList        bool                 `gorm:"default:true"             json:"can_get_movie_list"`
 	CanAddMovie            bool                 `gorm:"default:true"             json:"can_add_movie"`
 	CanDeleteMovie         bool                 `gorm:"default:true"             json:"can_delete_movie"`

@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue";
 import { ElNotification } from "element-plus";
-import { roomSettingsApi } from "@/services/apis/room";
+import { roomSettingsApi, updateSettingApi } from "@/services/apis/room";
 import { updateRoomPasswordApi, delRoomApi } from "@/services/apis/room";
 import { useLocalStorage } from "@vueuse/core";
 import { useRouteParams } from "@vueuse/router";
@@ -27,7 +27,7 @@ const Props = defineProps<{
   roomId: string;
 }>();
 
-const { myInfo } = useRoomApi();
+const { myInfo, getMyInfo } = useRoomApi();
 const { hasAdminPermission, roomMemberPermissionKeys, roomMemberPermissionKeysTranslate } =
   useRoomPermission();
 const can = (p: RoomAdminPermission) => {
@@ -36,6 +36,21 @@ const can = (p: RoomAdminPermission) => {
   return hasAdminPermission(myP, p);
 };
 const isAdmin = computed(() => myInfo.value!.role >= MEMBER_ROLE.Admin);
+const controlMode = ref(false);
+const controlSaving = ref(false);
+const { execute: saveControlMode } = updateSettingApi();
+const setControlMode = async (value: boolean) => {
+  const previous = controlMode.value;
+  controlSaving.value = true;
+  try {
+    await saveControlMode({headers:{Authorization:Props.token,"X-Room-Id":Props.roomId},data:{owner_control:value}});
+    controlMode.value=value;
+    await getMyInfo(Props.roomId);
+  } catch (err: any) {
+    controlMode.value=previous;
+    ElNotification({title:"切换控制模式失败",type:"error",message:err.response?.data.error||err.message});
+  } finally { controlSaving.value=false; }
+};
 
 const { state, execute, isReady } = roomSettingsApi();
 const getRoomSettings = async () => {
@@ -49,6 +64,7 @@ const getRoomSettings = async () => {
       url
     });
     if (!state.value) return;
+    controlMode.value = state.value.owner_control;
     userDefaultPermissions.value = parsePermissions(state.value.user_default_permissions, "member");
     guestPermissions.value = parsePermissions(state.value.guest_permissions, "member");
     for (const setting in state.value) {
@@ -175,6 +191,14 @@ defineExpose({
     <template #default>
       <div v-loading="!isReady">
         <el-form :inline="false" label-width="190px" label-position="left">
+          <el-divider content-position="left">播放控制</el-divider>
+          <el-form-item label="控制模式">
+            <el-select :model-value="controlMode" :disabled="!myInfo?.isOwner || controlSaving" :loading="controlSaving" @change="setControlMode">
+              <el-option label="按成员权限控制" :value="false" />
+              <el-option label="房主控制" :value="true" />
+            </el-select>
+            <small class="text-gray-500 mt-2">仅房主可切换。房主控制时，观众可以暂停自己，恢复后追上房间。</small>
+          </el-form-item>
           <el-form-item v-for="setting in settings">
             <template #label>
               <p :title="setting[1].comment">
@@ -184,7 +208,7 @@ defineExpose({
             <el-switch
               v-if="typeof setting[1].value === 'boolean'"
               v-model="setting[1].value"
-              :disabled="!can(RoomAdminPermission.PermissionSetRoomSettings)"
+              :disabled="!can(RoomAdminPermission.PermissionSetRoomSettings) || (controlMode && ['can_set_current_movie','can_set_current_status'].includes(setting[0]))"
               @change="updateSet(setting[0], setting[1].value)"
               :loading="isUpdating(setting[0])"
             />

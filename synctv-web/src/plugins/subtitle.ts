@@ -190,16 +190,7 @@ export function artplayerSubtitle(
         activate(item.key);
         return controlIcon("subtitle", "字幕");
       };
-      if (!Artplayer.utils.isMobile || art.fullscreen)
-        art.controls.update({
-          name: "subtitle",
-          position: "right",
-          index: 10,
-          html: controlIcon("subtitle", "字幕"),
-          selector,
-          onSelect
-        });
-      else if (art.controls.subtitle) art.controls.remove("subtitle");
+      if (art.controls.subtitle) art.controls.remove("subtitle");
       art.setting.update({
         name: "subtitle",
         html: "字幕",

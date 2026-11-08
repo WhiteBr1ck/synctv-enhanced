@@ -1,382 +1,387 @@
-import { debounces } from "@/utils";
 import { useDebounceFn } from "@vueuse/core";
-import { type WatchStopHandle } from "vue";
-import { Message, MessageType, Status } from "@/proto/message";
-import Artplayer from "artplayer";
+import { Message, MessageType, type Status } from "@/proto/message";
+import type Artplayer from "artplayer";
 import { ElNotification } from "element-plus";
-import { loadSyncPreferences, shouldCorrectTime, syncPreferencesKey, syncModes, syncTolerances, syncIntervals } from "@/utils/sync-preferences";
-import {icon,controlIcon} from './icons';
+import {
+  loadSyncPreferences,
+  shouldCorrectTime,
+  syncPreferencesKey,
+  syncModes,
+  syncTolerances,
+  syncIntervals
+} from "@/utils/sync-preferences";
+import { icon } from "./icons";
 
-const artPlay = async (art: Artplayer) => {
-  let retry = false;
-  await art.video.play().catch(() => {
-    art.muted = true;
-    retry = true;
-  });
-  if (retry)
-    await art.video
-      .play()
-      .then(() => {
-        ElNotification({
-          title: "温馨提示",
-          type: "info",
-          message: "由于浏览器限制，播放器已静音，请手动开启声音"
-        });
-      })
-      .catch((e) => {
-        ElNotification({
-          title: "自动播放失败，请手动点击同步按钮",
-          type: "error",
-          message: e
-        });
-      });
-};
-
-interface syncPlugin {
-  name: string;
-  setAndNoPublishSeek: (seek: number, reason?: string) => void;
-  setAndNoPublishPlay: () => void;
-  setAndNoPublishPause: () => void;
-  setAndNoPublishRate: (rate: number) => void;
-  setAndNoPublishStatus: (status: Status, reason?: string) => void;
-  currentStatus: () => Status;
-  lastCorrection: () => string;
-  automaticStatus: (status: Status) => boolean;
-  automaticSettings: () => string;
+export interface PlaybackAccess {
+  ownerControl: boolean;
+  canControlPlayback: boolean;
 }
 
-const debounceTime = 500;
-
-const newSyncControl = (art: Artplayer, publishStatus: (msg: Message) => boolean) => {
-  const syncControl = () => {
-    publishStatus(
-      Message.create({
-        type: MessageType.SYNC
-      })
-    );
-  };
-
-  art.controls.add({
-    name: "syncPlugin",
-    html: controlIcon('sync','同步'),
-    position: "right",
-    index: 25,
-    click: syncControl
-  });
-
-  art.setting.add({
-    name: "syncPlugin",
-    html: "立即同步",icon:icon('sync'),
-    selector: [
-      {
-        default: true,
-        html: "点击同步"
-      }
-    ],
-    onSelect: syncControl
-  });
-};
-
-export const newSyncPlugin = (
-  sendStatus: (msg: Message) => boolean,
-  initStatus: Status,
-  dynamicCurrentExpireId: () => number
-) => {
-  return (art: Artplayer): syncPlugin => {
-    let disposed=false;
-    const publishStatus=(message:Message)=>!disposed&&sendStatus(message);
-    const playingStatusDebounce = debounces(debounceTime);
-
-    let lastestSeek = 0;
-    let lastCorrection = "尚未发生同步跳转";
+export const newSyncPlugin =
+  (
+    sendStatus: (msg: Message) => boolean,
+    initStatus: Status,
+    dynamicCurrentExpireId: () => number,
+    getAccess: () => PlaybackAccess = () => ({ ownerControl: false, canControlPlayback: true }),
+    session: { paused: boolean } = { paused: false }
+  ) =>
+  (art: Artplayer) => {
+    let disposed = false,
+      ready = false,
+      locallyPaused = session.paused;
     let preferences = loadSyncPreferences();
+    let lastestSeek = 0,
+      lastCorrection = "尚未发生同步跳转";
+    let roomStatus = { ...initStatus },
+      receivedAt = Date.now();
     let statusInterval: ReturnType<typeof setInterval> | undefined;
-    let ready = false;
-    const configureChecks = () => {
-      clearInterval(statusInterval);
-      statusInterval = undefined;
-      if (ready && preferences.mode !== "off") statusInterval = setInterval(checkStatus, preferences.interval * 1000);
+    let expireInterval: ReturnType<typeof setInterval> | undefined;
+    let expectedRate = initStatus.playbackRate || 1;
+    let applyingPlay = false,
+      expectedNativePause = false;
+    const { $player, $progress } = art.template;
+    const badge = document.createElement("div");
+    badge.className = "synctv-follow-status";
+    badge.setAttribute("aria-live", "polite");
+    $player.append(badge);
+    const restricted = () => !getAccess().canControlPlayback;
+    const publish = (message: Message) => !disposed && sendStatus(message);
+    const currentStatus = (): Status => ({
+      isPlaying: !art.video.paused,
+      currentTime: art.currentTime,
+      playbackRate: art.playbackRate
+    });
+    const roomNow = (): Status => ({
+      ...roomStatus,
+      currentTime:
+        roomStatus.currentTime +
+        (roomStatus.isPlaying ? ((Date.now() - receivedAt) / 1000) * roomStatus.playbackRate : 0)
+    });
+    const remember = (status: Status) => {
+      roomStatus = { ...status };
+      receivedAt = Date.now();
+      expectedRate = status.playbackRate;
     };
-    const savePreferences = () => {
-      try { localStorage.setItem(syncPreferencesKey, JSON.stringify(preferences)); } catch { /* storage unavailable */ }
-      configureChecks();
+    const updateAccess = () => {
+      const access = getAccess();
+      if (!restricted()) locallyPaused = false;
+      session.paused = locallyPaused;
+      $player.classList.toggle("synctv-playback-readonly", restricted());
+      $progress.setAttribute("aria-disabled", String(restricted()));
+      $progress.title = restricted() ? "跟随房间进度，无法拖动" : "";
+      badge.textContent = locallyPaused
+        ? "已暂停跟随"
+        : access.ownerControl
+          ? "房主控制"
+          : restricted()
+            ? "跟随房间"
+            : "";
+      badge.hidden = !badge.textContent;
+      const rate = art.setting.find("playback-rate");
+      if (rate?.$item) rate.$item.setAttribute("aria-disabled", String(restricted()));
+      art.emit("synctv:follow-state" as any, { locallyPaused, restricted: restricted() });
     };
-
-    const publishSeek = () => {
-      console.groupCollapsed("广播视频空降");
-      console.log("seek:", art.currentTime);
-      console.log("rate:", art.playbackRate);
-      console.log("playing:", !art.video.paused);
-      console.groupEnd();
-      publishStatus(
-        Message.create({
-          type: MessageType.STATUS,
-          timestamp: Date.now(),
-          playbackStatus: {
-            isPlaying: !art.video.paused,
-            currentTime: art.currentTime,
-            playbackRate: art.playbackRate
-          }
-        })
-      );
+    const requestSync = () => {
+      if (!publish(Message.create({ type: MessageType.SYNC }))) {
+        art.notice.show = "连接尚未就绪，无法同步";
+        return false;
+      }
+      locallyPaused = false;
+      updateAccess();
+      return true;
     };
-
-    const __publishSeekDebounce = useDebounceFn(publishSeek, debounceTime);
-
-    const publishSeekDebounce = function () {
-      lastestSeek = Date.now();
-      __publishSeekDebounce();
+    const playLocal = async () => {
+      if (!art.video.paused) return;
+      applyingPlay = true;
+      try {
+        await art.video.play();
+      } catch {
+        if (disposed) return;
+        art.muted = true;
+        try {
+          await art.video.play();
+          art.notice.show = "浏览器已静音，请手动开启声音";
+        } catch {
+          if (!disposed)
+            ElNotification({
+              title: "自动播放受限，请点击播放或设置中的立即同步",
+              type: "warning"
+            });
+        }
+      } finally {
+        applyingPlay = false;
+      }
     };
-
     const setAndNoPublishSeek = (seek: number, reason = "房间同步") => {
       lastestSeek = Date.now();
       if (art.option.isLive || Math.abs(art.currentTime - seek) < 2) return;
-      const mode=reason==='房间定时校准'?`（${preferences.mode==='forward'?'仅向前':'双向'}）`:'';
-      lastCorrection = `${new Date().toLocaleTimeString()} · ${reason}${mode}：${art.currentTime.toFixed(1)} → ${seek.toFixed(1)} 秒`;
-      console.groupCollapsed("设置seek(非广播)");
-      console.log("seek:", seek);
-      console.log("rate:", art.playbackRate);
-      console.log("playing:", !art.video.paused);
-      console.groupEnd();
+      lastCorrection = `${new Date().toLocaleTimeString()} · ${reason}：${art.currentTime.toFixed(1)} → ${seek.toFixed(1)} 秒`;
       art.currentTime = seek;
     };
-
-    const publishPlay = () => {
-      console.groupCollapsed("广播视频播放");
-      console.log("seek:", art.currentTime);
-      console.log("rate:", art.playbackRate);
-      console.log("playing:", !art.video.paused);
-      console.groupEnd();
-      publishStatus(
-        Message.create({
-          type: MessageType.STATUS,
-          timestamp: Date.now(),
-          playbackStatus: {
-            isPlaying: true,
-            currentTime: art.currentTime,
-            playbackRate: art.playbackRate
-          }
-        })
-      );
-    };
-
-    const publishPlayDebounce = playingStatusDebounce(publishPlay);
-
-    const setAndNoPublishPlay = async () => {
-      if (!art.video.paused) return;
-      console.groupCollapsed("设置播放(非广播)");
-      console.log("seek:", art.currentTime);
-      console.log("rate:", art.playbackRate);
-      console.log("playing:", !art.video.paused);
-      console.groupEnd();
-      await artPlay(art);
-    };
-
-    const publishPause = () => {
-      console.groupCollapsed("广播视频暂停");
-      console.log("seek:", art.currentTime);
-      console.log("rate:", art.playbackRate);
-      console.log("playing:", !art.video.paused);
-      console.groupEnd();
-      publishStatus(
-        Message.create({
-          type: MessageType.STATUS,
-          timestamp: Date.now(),
-          playbackStatus: {
-            isPlaying: false,
-            currentTime: art.currentTime,
-            playbackRate: art.playbackRate
-          }
-        })
-      );
-    };
-
-    const publishPauseDebounce = playingStatusDebounce(publishPause);
-
-    const setAndNoPublishPause = () => {
-      if (art.video.paused) return;
-      console.groupCollapsed("设置暂停(非广播)");
-      console.log("seek:", art.currentTime);
-      console.log("rate:", art.playbackRate);
-      console.log("playing:", !art.video.paused);
-      console.groupEnd();
-      art.video.pause();
-    };
-
-    const publishRate = () => {
-      console.groupCollapsed("广播视频倍速");
-      console.log("seek:", art.currentTime);
-      console.log("rate:", art.playbackRate);
-      console.log("playing:", !art.video.paused);
-      console.groupEnd();
-      publishStatus(
-        Message.create({
-          type: MessageType.STATUS,
-          timestamp: Date.now(),
-          playbackStatus: {
-            isPlaying: !art.video.paused,
-            currentTime: art.currentTime,
-            playbackRate: art.playbackRate
-          }
-        })
-      );
-    };
-
     const setAndNoPublishRate = (rate: number) => {
-      if (art.option.isLive || art.playbackRate === rate) return;
-      art.off("video:ratechange", publishRate);
-      art.once("video:ratechange", () => {
-        art.on("video:ratechange", publishRate);
-      });
-      console.groupCollapsed("设置倍速(非广播)");
-      console.log("rate:", rate);
-      console.groupEnd();
-      art.playbackRate = rate;
+      expectedRate = rate;
+      if (!art.option.isLive && art.playbackRate !== rate) art.playbackRate = rate;
     };
-
-    const checkStatus = () => {
-      // 距离上一次seek超过10s后才会检查seek
-      if (
-        Date.now() - lastestSeek < 10000 ||
-        art.option.isLive ||
-        art.duration - art.currentTime < 5
-      ) {
+    const setAndNoPublishPlay = () => playLocal();
+    const setAndNoPublishPause = () => {
+      if (!art.video.paused) {
+        expectedNativePause = true;
+        art.video.pause();
+      }
+    };
+    const applyStatus = async (status: Status, reason?: string) => {
+      if (disposed) return;
+      setAndNoPublishRate(status.playbackRate);
+      setAndNoPublishSeek(status.currentTime, reason);
+      if (status.isPlaying) await playLocal();
+      else setAndNoPublishPause();
+    };
+    const setAndNoPublishStatus = async (status: Status, reason?: string) => {
+      remember(status);
+      if (reason === "手动同步") {
+        locallyPaused = false;
+        updateAccess();
+      }
+      if (restricted() && locallyPaused) {
+        art.video.pause();
         return;
       }
-      console.groupCollapsed("检查状态");
-      console.log("seek:", art.currentTime);
-      console.log("rate:", art.playbackRate);
-      console.log("playing:", !art.video.paused);
-      console.groupEnd();
-      publishStatus(
+      await applyStatus(status, reason);
+    };
+    // Quality switches restore the viewer's local state, not the room's timeline.
+    const restoreLocalStatus = (status: Status) =>
+      applyStatus({ ...status, isPlaying: locallyPaused ? false : status.isPlaying }, "切换画质");
+    const publishStatus = useDebounceFn(() => {
+      if (disposed || restricted()) return;
+      const status = currentStatus();
+      remember(status);
+      publish(
+        Message.create({ type: MessageType.STATUS, timestamp: Date.now(), playbackStatus: status })
+      );
+    }, 500);
+    const onPlay = () => {
+      if (restricted()) {
+        if (!requestSync()) setAndNoPublishPause();
+        return;
+      }
+      publishStatus();
+    };
+    const onPause = () => {
+      if (restricted()) {
+        locallyPaused = true;
+        updateAccess();
+        return;
+      }
+      publishStatus();
+    };
+    const onSeek = () => {
+      if (restricted()) {
+        setAndNoPublishSeek(roomNow().currentTime, "恢复房间进度");
+        art.notice.show = "当前为跟随模式，不能修改房间进度";
+        return;
+      }
+      lastestSeek = Date.now();
+      publishStatus();
+    };
+    const onRate = () => {
+      if (art.playbackRate === expectedRate) return;
+      if (restricted()) {
+        art.playbackRate = expectedRate;
+        return;
+      }
+      expectedRate = art.playbackRate;
+      publishStatus();
+    };
+    const onNativePlay = () => {
+      if (art.pip && !applyingPlay) onPlay();
+    };
+    const onNativePause = () => {
+      if (expectedNativePause) {
+        expectedNativePause = false;
+        return;
+      }
+      if (art.pip) onPause();
+    };
+    const checkStatus = () => {
+      if (
+        disposed ||
+        locallyPaused ||
+        art.option.isLive ||
+        Date.now() - lastestSeek < 10000 ||
+        art.duration - art.currentTime < 5
+      )
+        return;
+      publish(
         Message.create({
           type: MessageType.CHECK_STATUS,
           timestamp: Date.now(),
-          playbackStatus: {
-            isPlaying: !art.video.paused,
-            currentTime: art.currentTime,
-            playbackRate: art.playbackRate
-          }
+          playbackStatus: currentStatus()
         })
       );
     };
-
-    const checkExpire = () => {
-      console.groupCollapsed("检查过期");
-      console.log("expireId:", dynamicCurrentExpireId());
-      console.groupEnd();
-      publishStatus(
-        Message.create({
-          type: MessageType.EXPIRED,
-          timestamp: Date.now(),
-          expirationId: dynamicCurrentExpireId()
-        })
-      );
+    const configureChecks = () => {
+      clearInterval(statusInterval);
+      if (ready && preferences.mode !== "off")
+        statusInterval = setInterval(checkStatus, preferences.interval * 1000);
     };
-
-    const setAndNoPublishStatus = async (status: Status, reason?: string) => {
-      console.groupCollapsed("设置状态(非广播)");
-      console.log("seek:", status.currentTime);
-      console.log("rate:", status.playbackRate);
-      console.log("playing:", status.isPlaying);
-      console.groupEnd();
-      if (!art.option.isLive) {
-        setAndNoPublishRate(status.playbackRate);
-        setAndNoPublishSeek(status.currentTime, reason);
+    const savePreferences = () => {
+      try {
+        localStorage.setItem(syncPreferencesKey, JSON.stringify(preferences));
+      } catch {
+        /* storage unavailable */
       }
-      status.isPlaying ? await setAndNoPublishPlay() : setAndNoPublishPause();
+      configureChecks();
     };
-
-    const currentStatus = (): Status => {
-      return {
-        isPlaying: !art.video.paused,
-        currentTime: art.currentTime,
-        playbackRate: art.playbackRate
-      };
-    };
-
-    // Only CHECK_STATUS uses these local preferences. Deliberate room actions
-    // and the manual Sync button must still be applied to every participant.
     const automaticStatus = (status: Status) => {
-      if (preferences.mode === "off") return false;
+      remember(status);
+      if (locallyPaused || preferences.mode === "off") return false;
       const seek = shouldCorrectTime(art.currentTime, status.currentTime, preferences);
-      const changed = seek || status.isPlaying !== !art.video.paused || status.playbackRate !== art.playbackRate;
+      const changed =
+        seek || status.isPlaying !== !art.video.paused || status.playbackRate !== art.playbackRate;
       setAndNoPublishRate(status.playbackRate);
-      if (seek && !(preferences.mode === 'forward' && status.currentTime < art.currentTime)) setAndNoPublishSeek(status.currentTime, "房间定时校准");
-      if (status.isPlaying) void setAndNoPublishPlay(); else setAndNoPublishPause();
+      if (seek) setAndNoPublishSeek(status.currentTime, "房间定时校准");
+      if (status.isPlaying) void playLocal();
+      else setAndNoPublishPause();
       return changed;
     };
-    const automaticSettings = () => `${syncModes.find(mode => mode.value === preferences.mode)!.html} · 容差 ${preferences.tolerance} 秒 · 每 ${preferences.interval} 秒检查`;
-
-    const intervals: number[] = [];
-    const watchers: WatchStopHandle[] = [];
-    art.on("destroy", () => {
-      disposed=true;
-      clearInterval(statusInterval);
-      intervals.forEach((interval) => {
-        clearInterval(interval);
-      });
-      watchers.forEach((watcher) => {
-        watcher();
-      });
+    const blockSeek = (event: Event) => {
+      if (!restricted()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const blockGesture = (event: TouchEvent) => {
+      if (restricted() && event.touches.length === 1) blockSeek(event);
+    };
+    const blockKeys = (event: KeyboardEvent) => {
+      const target = event.target as Element | null;
+      if (!restricted() || !art.isFocus || target?.closest?.("input,textarea,[contenteditable]"))
+        return;
+      if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.code)) blockSeek(event);
+    };
+    const progressEvents = ["pointerdown", "mousedown", "touchstart", "touchmove", "click"];
+    for (const event of progressEvents)
+      $progress.addEventListener(event, blockSeek, { capture: true, passive: false });
+    art.video.addEventListener("touchmove", blockGesture, { capture: true, passive: false });
+    document.addEventListener("keydown", blockKeys, true);
+    const blockRateMenu = (event: Event) => {
+      if (restricted() && (event.target as Element)?.closest?.('[data-name="playback-rate"]'))
+        blockSeek(event);
+    };
+    const settingsElement = $player.querySelector?.(".art-settings");
+    settingsElement?.addEventListener("click", blockRateMenu, true);
+    art.on("synctv:playback-access" as any, updateAccess);
+    art.on("setting", updateAccess);
+    art.on("play", onPlay);
+    art.on("pause", onPause);
+    art.on("seek", onSeek);
+    art.on("video:ratechange", onRate);
+    art.on("video:play", onNativePlay);
+    art.on("video:pause", onNativePause);
+    art.setting.add({
+      name: "syncPlugin",
+      html: "立即同步",
+      icon: icon("sync"),
+      onClick: () => {
+        requestSync();
+        art.setting.show = false;
+        return "";
+      }
     });
-
-    if (!art.option.isLive) {
-      art.once("ready", async () => {
-        console.groupCollapsed("同步状态");
-        console.log("seek:", initStatus.currentTime);
-        console.log("rate:", initStatus.playbackRate);
-        console.log("playing:", initStatus.isPlaying);
-        console.groupEnd();
-        art.currentTime = initStatus.currentTime;
-        art.playbackRate = initStatus.playbackRate;
-        if (initStatus.isPlaying) {
-          await artPlay(art);
+    art.setting.add({
+      name: "sync-preferences",
+      html: "同步设置",
+      icon: icon("clock"),
+      width: 300,
+      selector: [
+        {
+          html: "定时校准方式",
+          icon: icon("sync"),
+          tooltip: syncModes.find((mode) => mode.value === preferences.mode)!.html,
+          selector: syncModes.map((mode) => ({
+            ...mode,
+            default: mode.value === preferences.mode
+          })),
+          onSelect(item: any) {
+            preferences.mode = item.value;
+            savePreferences();
+            return item.html;
+          }
+        },
+        {
+          html: "进度容差",
+          icon: icon("tolerance"),
+          tooltip: `${preferences.tolerance} 秒`,
+          selector: syncTolerances.map((value) => ({
+            html: `${value} 秒`,
+            value,
+            default: value === preferences.tolerance
+          })),
+          onSelect(item: any) {
+            preferences.tolerance = item.value;
+            savePreferences();
+            return item.html;
+          }
+        },
+        {
+          html: "检查间隔",
+          icon: icon("interval"),
+          tooltip: `${preferences.interval} 秒`,
+          selector: syncIntervals.map((value) => ({
+            html: `${value} 秒`,
+            value,
+            default: value === preferences.interval
+          })),
+          onSelect(item: any) {
+            preferences.interval = item.value;
+            savePreferences();
+            return item.html;
+          }
         }
-        if(disposed)return;
-
-        ready = true;
-        configureChecks();
-        intervals.push(setInterval(checkExpire, 10000));
-
-        newSyncControl(art, publishStatus);
-        art.setting.add({ name: "sync-preferences", html: "同步设置",icon:icon('clock'), width: 300, selector: [
-          { html: "定时校准方式",icon:icon('sync'), tooltip: syncModes.find(mode => mode.value === preferences.mode)!.html,
-            selector: syncModes.map(mode => ({ ...mode, default: mode.value === preferences.mode })),
-            onSelect(item: any) { preferences.mode = item.value; savePreferences(); return item.html; } },
-          { html: "进度容差",icon:icon('tolerance'), tooltip: `${preferences.tolerance} 秒`,
-            selector: syncTolerances.map(value => ({ html: `${value} 秒`, value, default: value === preferences.tolerance })),
-            onSelect(item: any) { preferences.tolerance = item.value; savePreferences(); return item.html; } },
-          { html: "检查间隔",icon:icon('interval'), tooltip: `${preferences.interval} 秒`,
-            selector: syncIntervals.map(value => ({ html: `${value} 秒`, value, default: value === preferences.interval })),
-            onSelect(item: any) { preferences.interval = item.value; savePreferences(); return item.html; } }
-        ] });
-
-        art.on("play", publishPlayDebounce);
-
-        // 视频暂停
-        art.on("pause", publishPauseDebounce);
-
-        // 空降
-        art.on("seek", publishSeekDebounce);
-
-        // 倍速
-        art.on("video:ratechange", publishRate);
-
-        art.on("destroy", () => {
-          art.off("play", publishPlayDebounce);
-          art.off("pause", publishPauseDebounce);
-          art.off("seek", publishSeekDebounce);
-          art.off("video:ratechange", publishRate);
-        });
-      });
-    } else {
-      art.once("ready", () => {
-        setAndNoPublishPlay();
-        intervals.push(setInterval(checkExpire, 10000));
-      });
-    }
-
+      ]
+    });
+    art.once("ready", async () => {
+      if (disposed) return;
+      await applyStatus(
+        locallyPaused
+          ? { ...initStatus, isPlaying: false }
+          : art.option.isLive
+            ? { ...initStatus, isPlaying: true }
+            : initStatus
+      );
+      if (disposed) return;
+      ready = true;
+      configureChecks();
+      expireInterval = setInterval(
+        () =>
+          publish(
+            Message.create({
+              type: MessageType.EXPIRED,
+              timestamp: Date.now(),
+              expirationId: dynamicCurrentExpireId()
+            })
+          ),
+        10000
+      );
+    });
+    updateAccess();
+    art.on("destroy", () => {
+      disposed = true;
+      clearInterval(statusInterval);
+      clearInterval(expireInterval);
+      art.off("play", onPlay);
+      art.off("pause", onPause);
+      art.off("seek", onSeek);
+      art.off("video:ratechange", onRate);
+      art.off("video:play", onNativePlay);
+      art.off("video:pause", onNativePause);
+      art.off("synctv:playback-access" as any, updateAccess);
+      art.off("setting", updateAccess);
+      for (const event of progressEvents) $progress.removeEventListener(event, blockSeek, true);
+      art.video.removeEventListener("touchmove", blockGesture, true);
+      document.removeEventListener("keydown", blockKeys, true);
+      badge.remove();
+      settingsElement?.removeEventListener("click", blockRateMenu, true);
+    });
     return {
       name: "syncPlugin",
       setAndNoPublishSeek,
@@ -384,10 +389,14 @@ export const newSyncPlugin = (
       setAndNoPublishPause,
       setAndNoPublishRate,
       setAndNoPublishStatus,
+      restoreLocalStatus,
       currentStatus,
       lastCorrection: () => lastCorrection,
       automaticStatus,
-      automaticSettings
+      automaticSettings: () =>
+        `${syncModes.find((mode) => mode.value === preferences.mode)!.html} · 容差 ${preferences.tolerance} 秒 · 每 ${preferences.interval} 秒检查`,
+      requestSync,
+      isLocallyPaused: () => locallyPaused,
+      updateAccess
     };
   };
-};

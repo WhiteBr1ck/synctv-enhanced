@@ -134,7 +134,6 @@ class DASHProvider implements MediaProvider {
 
 export default function artplayerPluginMediaControl() {
   return (art: Artplayer) => {
-    const isMobile = Artplayer.utils.isMobile;
 
     function getProvider(): MediaProvider | null {
       if (art.hls) {
@@ -234,23 +233,7 @@ export default function artplayerPluginMediaControl() {
         return;
       }
 
-      const updateControls = () => {
-        if (!isMobile || art.fullscreen || art.fullscreenWeb) {
-          art.controls.update({
-            name,
-            position: "right",
-            index: name === "quality" ? 20 : 12,
-            html: controlIcon(name==='quality'?'quality':'audio',title),
-            style: { padding: "0 10px" },
-            selector,
-            onSelect
-          });
-        } else if (art.controls[name]) {
-          art.controls.remove(name);
-        }
-      };
-
-      updateControls();
+      if (art.controls[name]) art.controls.remove(name);
 
       art.setting.update({
         name,
@@ -277,11 +260,6 @@ export default function artplayerPluginMediaControl() {
     // Source plugins are installed later in the same constructor. Show their
     // alternatives before canplay so an unsupported default can be replaced.
     queueMicrotask(update);
-
-    if (isMobile) {
-      art.on("fullscreen", update);
-      art.on("fullscreenWeb", update);
-    }
 
     return {
       name: "artplayerPluginMediaControl",

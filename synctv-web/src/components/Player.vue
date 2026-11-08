@@ -17,6 +17,8 @@ import P2PEngineMedia, {
 } from "@swarmcloud/media";
 import {escapeLabel} from '@/utils/track-label';
 import artplayerPluginDanmukuInput, { playerFullscreenOptions } from "@/plugins/danmuku-input";
+import { artplayerLayout } from "@/plugins/player-layout";
+import { icon } from "@/plugins/icons";
 import '@/plugins/player-ui.css';
 
 const watchers: WatchStopHandle[] = [];
@@ -94,13 +96,14 @@ const recordTransferStats = (stats: p2pStatsType, engine: p2pOperationType, play
 };
 
 const Props = defineProps({
+  theater: {type:Boolean,default:false},
   options: {
     type: Object as PropType<options>,
     required: true
   }
 });
 
-const Emits = defineEmits(["get-instance"]);
+const Emits = defineEmits(["get-instance", "toggle-theater"]);
 
 const playMedia = async (player: HTMLMediaElement, url: string, art: any) => {
   resetP2P();
@@ -368,18 +371,19 @@ const newPlayerOption = (html: HTMLDivElement): Option => {
     screenshot: false, // 显示视频截图功能
     setting: true,
     hotkey: true, // 快捷键
-    pip: true, // 显示画中画按钮
+    pip: false,
     mutex: true, // 互斥，阻止多个播放器同时播放
     ...playerFullscreenOptions(),
     subtitleOffset: true, // 显示字幕偏移功能
-    miniProgressBar: true, // 迷你进度条,播放器失去焦点后且正在播放时出现
+    miniProgressBar: false,
     playsInline: true, // 在移动端是否使用 playsInline 模式
     lock: true, // 移动端显示锁定按钮
-    fastForward: true, // 移动端添加长按视频快进功能
+    fastForward: false,
     autoPlayback: false, // 使用自动回放功能
     airplay: false, // 隔空播放
     type: Props.options.type,
-    plugins: [...(Props.options.plugins || []), artplayerPluginDanmukuInput()],
+    plugins: [...(Props.options.plugins || []), artplayerPluginDanmukuInput(), artplayerLayout({active:()=>Props.theater,toggle:()=>Emits("toggle-theater")})],
+    icons: { play:icon("play"),pause:icon("pause"),volume:icon("volume"),volumeClose:icon("mute"),setting:icon("settings") },
     layers:Props.options.title?[{name:'movie-title',html:escapeLabel(Props.options.title)}]:[],
     subtitle: {
       encoding: "utf-8",
@@ -548,13 +552,15 @@ onMounted(() => {
   );
 });
 
+watch(() => Props.theater, () => { if(art&&!art.isDestroy)art.emit("synctv:theater" as any); });
+
 onBeforeUnmount(() => {
   art.destroy();
 });
 </script>
 
 <template>
-  <div ref="father"></div>
+  <div ref="father" class="synctv-player-host"></div>
 
   <div v-if="p2pEngine" class="p2p-panel mt-2 px-4">
     <div class="flex items-center justify-between">

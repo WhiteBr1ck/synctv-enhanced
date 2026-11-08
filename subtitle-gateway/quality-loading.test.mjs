@@ -51,37 +51,38 @@ test('quality choices are available before an unsupported default stream can pla
   const {art, controls, settings} = player();
   try {
     await tick();
-    assert.deepEqual(controls.get('quality')?.selector.map(item=>item.html), ['默认','原画','H.264 兼容']);
+    assert.deepEqual(settings.get('quality')?.selector.map(item=>item.html), ['默认','原画','H.264 兼容']);
     assert.equal(settings.get('quality')?.html, '画质');
   } finally { art.isDestroy=true; art.emit('destroy'); }
 });
 
 test('a viewer can switch to H264 before ready and restore progress locally', async () => {
-  const {art, controls, status} = player();
+  const {art, controls, settings, status} = player();
   try {
     await tick();
-    const menu=controls.get('quality');
+    const menu=settings.get('quality');
     assert.ok(menu, 'decoder recovery must not require a successful first playback');
     menu.onSelect(menu.selector.find(item=>item.html==='H.264 兼容'));
     assert.equal(art.url,'compatible');
     assert.equal(art.plugins.source.currentSource().playbackMode,'transcode');
-    assert.ok(controls.has('quality'), 'source switch must restore the quality selector immediately');
+    assert.ok(settings.has('quality'), 'source switch must restore the quality setting immediately');
+    assert.equal(controls.has('quality'),false);
     art.emit('video:canplay');
     assert.deepEqual(art.restored,status);
   } finally { art.isDestroy=true; art.emit('destroy'); }
 });
 
 test('source refresh exposes new choices even when the previous source was removed', async () => {
-  const {art, controls} = player([]);
+  const {art, controls, settings} = player([]);
   try {
     await tick(); assert.equal(controls.has('quality'),false);
     art.plugins.source.updateSources(sources);
     await tick();
-    assert.equal(controls.get('quality')?.selector.length,3);
+    assert.equal(settings.get('quality')?.selector.length,3);
   } finally { art.isDestroy=true; art.emit('destroy'); }
 });
 
-test('mobile settings expose quality before ready and fullscreen adds the toolbar button', async () => {
+test('mobile settings expose quality before ready and keep the toolbar clean in fullscreen', async () => {
   setMobile(true);
   const {art, controls, settings} = player();
   try {
@@ -89,17 +90,17 @@ test('mobile settings expose quality before ready and fullscreen adds the toolba
     assert.equal(controls.has('quality'),false);
     assert.equal(settings.get('quality')?.selector.length,3);
     art.fullscreen=true; art.emit('fullscreen');
-    assert.equal(controls.get('quality')?.selector.length,3);
+    assert.equal(settings.get('quality')?.selector.length,3);
   } finally { art.isDestroy=true; art.emit('destroy'); setMobile(false); }
 });
 
-test('iPad web fullscreen keeps quality choices in the toolbar and settings', async () => {
+test('iPad web fullscreen keeps quality choices in settings without extra toolbar buttons', async () => {
   setMobile(true);
   const {art, controls, settings} = player();
   try {
     await tick();
     art.fullscreenWeb=true; art.emit('fullscreenWeb',true);
-    assert.equal(controls.get('quality')?.selector.length,3);
+    assert.equal(controls.has('quality'),false);
     assert.equal(settings.get('quality')?.selector.length,3);
     art.fullscreenWeb=false; art.emit('fullscreenWeb',false);
     assert.equal(controls.has('quality'),false);

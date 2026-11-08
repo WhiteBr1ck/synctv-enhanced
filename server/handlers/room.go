@@ -41,13 +41,17 @@ func RoomMe(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, model.NewAPIDataResp(&model.RoomMeResp{
-		UserID:           user.ID,
-		RoomID:           room.ID,
-		JoinAt:           member.CreatedAt.UnixMilli(),
-		Status:           member.Status,
-		Role:             member.Role,
-		Permissions:      member.Permissions,
-		AdminPermissions: member.AdminPermissions,
+		UserID:             user.ID,
+		RoomID:             room.ID,
+		JoinAt:             member.CreatedAt.UnixMilli(),
+		Status:             member.Status,
+		Role:               member.Role,
+		Permissions:        member.Permissions,
+		AdminPermissions:   member.AdminPermissions,
+		OwnerControl:       room.Settings.OwnerControl,
+		IsOwner:            room.IsCreator(user.ID),
+		CanControlPlayback: user.HasRoomPermission(room, dbModel.PermissionSetCurrentStatus),
+		CanChangeMovie:     user.HasRoomPermission(room, dbModel.PermissionSetCurrentMovie),
 	}))
 }
 
@@ -64,14 +68,17 @@ func RoomInfo(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, model.NewAPIDataResp(gin.H{
-		"id":           room.ID,
-		"name":         room.Name,
-		"needPassword": room.NeedPassword(),
-		"creator":      op.GetUserName(room.CreatorID),
-		"creatorId":    room.CreatorID,
-		"createdAt":    room.CreatedAt.UnixMilli(),
-		"status":       room.Status,
-		"enabledGuest": room.EnabledGuest(),
+		"id":                 room.ID,
+		"name":               room.Name,
+		"needPassword":       room.NeedPassword(),
+		"creator":            op.GetUserName(room.CreatorID),
+		"creatorId":          room.CreatorID,
+		"createdAt":          room.CreatedAt.UnixMilli(),
+		"status":             room.Status,
+		"enabledGuest":       room.EnabledGuest(),
+		"ownerControl":       room.Settings.OwnerControl,
+		"canControlPlayback": user.HasRoomPermission(room, dbModel.PermissionSetCurrentStatus),
+		"canChangeMovie":     user.HasRoomPermission(room, dbModel.PermissionSetCurrentMovie),
 
 		"member": gin.H{
 			"id":               user.ID,

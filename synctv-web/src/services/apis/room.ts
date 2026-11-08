@@ -156,6 +156,7 @@ export const roomSettingsApi = useDefineApi<
     can_set_current_movie: boolean;
     can_set_current_status: boolean;
     can_send_chat_message: boolean;
+    owner_control: boolean;
   }
 >({
   method: "GET"

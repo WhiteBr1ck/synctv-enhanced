@@ -59,6 +59,22 @@ const { state: roomInfo, execute: reqRoomInfoApi } = roomInfoApi();
 const { hasMemberPermission } = useRoomPermission();
 
 let player: Artplayer | undefined;
+const followSession = { paused:false };
+const theater = ref(false);
+const theaterSidebar = ref(true);
+let previousBodyOverflow = "";
+watch(theater, async (active) => {
+  if(active){previousBodyOverflow=document.body.style.overflow;document.body.style.overflow="hidden";}
+  else document.body.style.overflow=previousBodyOverflow;
+  await nextTick();player?.emit("resize");chatScroll.changed();
+});
+const exitTheaterOnEscape=(event:KeyboardEvent)=>{
+  if(event.key!=="Escape"||!theater.value||player?.fullscreenWeb||document.fullscreenElement)return;
+  if((event.target as Element)?.closest("input,textarea,[contenteditable]"))return;
+  theater.value=false;
+};
+document.addEventListener("keydown",exitTheaterOnEscape);
+onBeforeUnmount(()=>{document.removeEventListener("keydown",exitTheaterOnEscape);if(theater.value)document.body.style.overflow=previousBodyOverflow;});
 
 const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
 const { status, data, send, open } = useWebSocket(
@@ -107,7 +123,7 @@ const restoreChatHistory = async () => {
     if (err.code !== 'ERR_CANCELED') ElMessage.warning('聊天记录加载失败，重新连接后会再试');
   }
 };
-watch(status, value => { if (value === 'OPEN') void restoreChatHistory(); });
+watch(status, value => { if (value === 'OPEN') { void restoreChatHistory(); void getMyInfo(roomID.value); } });
 onBeforeUnmount(() => { ++historyGeneration; historyRequest?.abort(); });
 const sendChatText = (msg: string, onSuccess?: () => any, onFailed?: () => any) => {
   if (msg.length === 0) {
@@ -182,7 +198,10 @@ const playerOption = computed<options>(() => {
         }
       }),
       // WARN: room.currentStatus 变了会导致重载
-      newSyncPlugin(sendElement, room.currentStatus, () => room.currentExpireId),
+      newSyncPlugin(sendElement, room.currentStatus, () => room.currentExpireId, () => ({
+        ownerControl: !!myInfo.value?.ownerControl,
+        canControlPlayback: !!myInfo.value?.canControlPlayback
+      }), followSession),
       artplayerPluginMediaControl(),
     ]
   };
@@ -663,6 +682,7 @@ const chatScroll = useChatScroll(chatArea,chatContent);
 
 // 设置聊天框高度
 const resetChatAreaHeight = () => {
+  if(theater.value){chatArea.value?.style.removeProperty("height");return;}
   const h = playArea.value ? playArea : noPlayArea;
   if (!chatArea.value || !h.value) return;
 
@@ -685,9 +705,12 @@ useResizeObserver(audioControls, resetChatAreaHeight);
 
 const can = (p: RoomMemberPermission) => {
   if (!myInfo.value) return;
+  if (p === RoomMemberPermission.PermissionSetCurrentMovie) return myInfo.value.canChangeMovie;
   const myP = myInfo.value.permissions;
   return hasMemberPermission(myP, p);
 };
+
+watch(() => myInfo.value, () => player?.emit("synctv:playback-access" as any));
 
 const p = async () => {
   if (can(RoomMemberPermission.PermissionGetMovieList)) await getMovies();
@@ -757,8 +780,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <el-row :gutter="20">
-    <el-col :md="18" class="mb-5 max-sm:my-2">
+  <div class="cinema-stage" :class="{'cinema-theater':theater,'cinema-sidebar-hidden':theater&&!theaterSidebar}">
+  <div v-if="theater" class="theater-actions">
+    <button @click="theaterSidebar=!theaterSidebar">{{theaterSidebar?'收起消息栏':'展开消息栏'}}</button>
+    <button @click="theater=false">退出剧场</button>
+  </div>
+  <el-row :gutter="20" class="cinema-stage-row">
+    <el-col :md="18" class="mb-5 max-sm:my-2 cinema-video-column">
       <div class="card" ref="card">
         <div
           class="card-title flex flex-wrap justify-between max-sm:text-sm max-sm:pb-4"
@@ -775,7 +803,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="card-body max-sm:p-0 pb-4" ref="playArea" v-if="playerOption.url">
           <div class="art-player">
-            <Player :key="room.currentMovie.id + ':' + room.currentMovie.subPath" @get-instance="getPlayerInstance" :options="playerOption"></Player>
+            <Player :key="room.currentMovie.id + ':' + room.currentMovie.subPath" @get-instance="getPlayerInstance" :options="playerOption" :theater="theater" @toggle-theater="theater=!theater"></Player>
           </div>
         </div>
         <div class="card-body max-sm:pb-3 max-sm:px-3" ref="noPlayArea" v-else>
@@ -790,7 +818,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </el-col>
-    <el-col :md="6" class="mb-5 max-sm:mb-2">
+    <el-col :md="6" class="mb-5 max-sm:mb-2 cinema-chat-column">
       <div class="card h-full">
         <div class="card-title">
           在线聊天
@@ -899,6 +927,7 @@ onBeforeUnmount(() => {
       </div>
     </el-col>
   </el-row>
+  </div>
 
   <el-row :gutter="20">
     <!-- 房间信息 -->
@@ -932,6 +961,42 @@ onBeforeUnmount(() => {
 </template>
 
 <style lang="less" scoped>
+.cinema-theater {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: #090c12;
+  color: #e5e7eb;
+  .cinema-stage-row {display:flex;flex-wrap:nowrap;width:100%;height:100%;margin:0 !important;}
+  .cinema-video-column {flex:1;max-width:none;width:0;padding:0 !important;margin:0 !important;min-width:0;}
+  .cinema-video-column > .card {height:100%;background:#000;border:0;border-radius:0;display:flex;flex-direction:column;}
+  .cinema-video-column .card-title {display:none !important;}
+  .cinema-video-column .card-body {padding:0;flex:1;min-height:0;}
+  .art-player {height:100%;}
+  :deep(.synctv-player-host), :deep(.artplayer-app) {height:100%;aspect-ratio:auto;}
+  :deep(.p2p-panel) {display:none;}
+  .cinema-chat-column {width:340px;flex:0 0 340px;max-width:36vw;padding:0 !important;margin:0 !important;}
+  .cinema-chat-column > .card {height:100%;display:flex;flex-direction:column;border:0;border-left:1px solid #ffffff18;border-radius:0;background:#121722;}
+  .cinema-chat-column .card-title {padding-top:54px;}
+  .cinema-chat-column .card-body:has(> .chatArea) {display:flex;flex-direction:column;flex:1;min-height:0;}
+  .chatArea {flex:1;height:auto !important;min-height:0;transition:none;}
+  .card-footer {flex-shrink:0;}
+  .cinema-chat-column > .card {background:#121722 !important;}
+  .theater-actions {position:absolute;right:10px;top:10px;z-index:100;display:flex;gap:8px;}
+  .theater-actions button {background:#263244;color:#e5e7eb;border:1px solid #ffffff28;padding:6px 10px;border-radius:6px;font-size:12px;}
+  &.cinema-sidebar-hidden .cinema-chat-column {display:none;}
+  &.cinema-sidebar-hidden :deep(.art-layer-movie-title) {padding-right:200px;}
+}
+@media(max-width:600px) and (orientation:portrait) {
+  .cinema-theater {
+    :deep(.art-layer-movie-title) {padding-right:200px;}
+    .cinema-stage-row {flex-direction:column;}
+    .cinema-video-column {width:100%;flex:0 0 45%;}
+    .cinema-chat-column {width:100%;max-width:none;flex:1;min-height:0;}
+    .cinema-chat-column .card-title {padding-top:12px;}
+    &.cinema-sidebar-hidden .cinema-video-column {flex:1;}
+  }
+}
 .chatArea {
   overflow-y: scroll;
   height: 67vh;

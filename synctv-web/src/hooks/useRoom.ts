@@ -394,6 +394,8 @@ export const useRoomApi = () => {
 
     if (_myInfo.value) {
       myInfo.value = _myInfo.value;
+      if (!myInfo.value.canChangeMovie) myInfo.value.permissions &= ~RoomMemberPermission.PermissionSetCurrentMovie;
+      if (!myInfo.value.canControlPlayback) myInfo.value.permissions &= ~RoomMemberPermission.PermissionSetCurrentStatus;
     }
   };
 

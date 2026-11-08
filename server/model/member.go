@@ -34,13 +34,17 @@ func (r *RoomSetMemberPermissionsReq) Decode(ctx *gin.Context) error {
 }
 
 type RoomMeResp struct {
-	UserID           string                       `json:"userId"`
-	RoomID           string                       `json:"roomId"`
-	JoinAt           int64                        `json:"joinAt"`
-	Role             dbModel.RoomMemberRole       `json:"role"`
-	Status           dbModel.RoomMemberStatus     `json:"status"`
-	Permissions      dbModel.RoomMemberPermission `json:"permissions"`
-	AdminPermissions dbModel.RoomAdminPermission  `json:"adminPermissions"`
+	OwnerControl       bool                         `json:"ownerControl"`
+	IsOwner            bool                         `json:"isOwner"`
+	CanControlPlayback bool                         `json:"canControlPlayback"`
+	CanChangeMovie     bool                         `json:"canChangeMovie"`
+	UserID             string                       `json:"userId"`
+	RoomID             string                       `json:"roomId"`
+	JoinAt             int64                        `json:"joinAt"`
+	Role               dbModel.RoomMemberRole       `json:"role"`
+	Status             dbModel.RoomMemberStatus     `json:"status"`
+	Permissions        dbModel.RoomMemberPermission `json:"permissions"`
+	AdminPermissions   dbModel.RoomAdminPermission  `json:"adminPermissions"`
 }
 
 type RoomSetAdminReq struct {

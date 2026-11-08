@@ -12,6 +12,7 @@ import (
 	"github.com/synctv-org/synctv/internal/db"
 	"github.com/synctv-org/synctv/internal/model"
 	"github.com/synctv-org/synctv/internal/settings"
+	pb "github.com/synctv-org/synctv/proto/message"
 	"github.com/zijiren233/gencontainer/rwmap"
 	rtmps "github.com/zijiren233/livelib/server"
 	"github.com/zijiren233/stream"
@@ -151,6 +152,10 @@ func (r *Room) IsGuest(userID string) bool {
 }
 
 func (r *Room) HasPermission(userID string, permission model.RoomMemberPermission) bool {
+	if r.Settings.OwnerControl && !r.IsCreator(userID) &&
+		permission&(model.PermissionSetCurrentStatus|model.PermissionSetCurrentMovie) != 0 {
+		return false
+	}
 	if r.IsCreator(userID) {
 		return true
 	}
@@ -615,6 +620,10 @@ func (r *Room) afterUpdateSettings(rs *model.RoomSettings) error {
 	}
 
 	r.Settings = rs
+	// Refresh effective playback permissions without changing the current movie.
+	if err := r.Broadcast(&pb.Message{Type: pb.MessageType_MY_STATUS}); err != nil {
+		return err
+	}
 	if rs.DisableGuest {
 		return r.KickUser(db.GuestUserID)
 	}

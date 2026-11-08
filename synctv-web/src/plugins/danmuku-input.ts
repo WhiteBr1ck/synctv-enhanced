@@ -8,10 +8,9 @@ export function isAppleTouchDevice(device: Device = navigator) {
 }
 
 export function playerFullscreenOptions(device: Device = navigator) {
-  const appleTouch = isAppleTouchDevice(device);
-  // Keep the input in the document instead of entering the native video UI.
-  // CSS rotation also rotates the input, but cannot rotate the system keyboard.
-  return { fullscreen: !appleTouch, fullscreenWeb: true, autoOrientation: !appleTouch };
+  // Custom controls request container fullscreen only. Never fall back to the
+  // native video UI, which cannot carry the chat/ASS renderer and text input.
+  return { fullscreen: false, fullscreenWeb: false, autoOrientation: false };
 }
 
 export default function artplayerPluginDanmukuInput(device: Device = navigator) {
@@ -39,7 +38,7 @@ export default function artplayerPluginDanmukuInput(device: Device = navigator) 
     function updateViewport() {
       if (destroyed) return;
       // Move only the controls. Resizing the video would also resize ASS canvases.
-      const inset = appleTouch && art.fullscreenWeb && input && document.activeElement === input && viewport
+      const inset = appleTouch && (art.fullscreenWeb || art.fullscreen) && input && document.activeElement === input && viewport
         ? Math.max(0, $player.getBoundingClientRect().bottom - viewport.offsetTop - viewport.height)
         : 0;
       $player.style.setProperty("--synctv-keyboard-inset", `${inset}px`);
@@ -61,7 +60,7 @@ export default function artplayerPluginDanmukuInput(device: Device = navigator) 
     }
 
     function updateFullscreenLabel() {
-      if (!art.fullscreenWeb && input && document.activeElement === input) input.blur();
+      if (!art.fullscreenWeb && !art.fullscreen && input && document.activeElement === input) input.blur();
       if (appleTouch) {
         art.controls.fullscreenWeb?.setAttribute("aria-label", art.fullscreenWeb ? "退出全屏" : "全屏");
       }

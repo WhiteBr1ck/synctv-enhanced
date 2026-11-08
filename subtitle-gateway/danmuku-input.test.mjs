@@ -62,11 +62,11 @@ function fixture(device = ipad, withInput = true) {
 test('iPad desktop user agents and iOS retain document fullscreen without CSS rotation', () => {
   for(const device of [ipad,{userAgent:'iPad',platform:'iPad',maxTouchPoints:5},{userAgent:'iPhone',platform:'iPhone',maxTouchPoints:5}]) {
     assert.equal(isAppleTouchDevice(device),true);
-    assert.deepEqual(playerFullscreenOptions(device),{fullscreen:false,fullscreenWeb:true,autoOrientation:false});
+    assert.deepEqual(playerFullscreenOptions(device),{fullscreen:false,fullscreenWeb:false,autoOrientation:false});
   }
   for(const device of [desktop,{userAgent:'Android',platform:'Linux',maxTouchPoints:5},{userAgent:'Windows',platform:'Win32',maxTouchPoints:10}]) {
     assert.equal(isAppleTouchDevice(device),false);
-    assert.deepEqual(playerFullscreenOptions(device),{fullscreen:true,fullscreenWeb:true,autoOrientation:true});
+    assert.deepEqual(playerFullscreenOptions(device),{fullscreen:false,fullscreenWeb:false,autoOrientation:false});
   }
 });
 

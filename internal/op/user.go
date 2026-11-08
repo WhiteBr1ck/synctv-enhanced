@@ -3,6 +3,7 @@ package op
 import (
 	"errors"
 	"hash/crc32"
+	"strings"
 	"sync/atomic"
 
 	"github.com/synctv-org/synctv/internal/cache"
@@ -223,6 +224,10 @@ func (u *User) IsGuest() bool {
 }
 
 func (u *User) HasRoomPermission(room *Room, permission model.RoomMemberPermission) bool {
+	if room.Settings.OwnerControl && !room.IsCreator(u.ID) &&
+		permission&(model.PermissionSetCurrentStatus|model.PermissionSetCurrentMovie) != 0 {
+		return false
+	}
 	if u.IsAdmin() {
 		return true
 	}
@@ -374,6 +379,9 @@ func (u *User) UpdateRoomMovie(room *Room, movieID string, movie *model.MovieBas
 }
 
 func (u *User) SetRoomSettings(room *Room, setting *model.RoomSettings) error {
+	if setting.OwnerControl != room.Settings.OwnerControl && !room.IsCreator(u.ID) {
+		return model.ErrNoPermission
+	}
 	if !u.HasRoomAdminPermission(room, model.PermissionSetRoomSettings) {
 		return model.ErrNoPermission
 	}
@@ -381,6 +389,16 @@ func (u *User) SetRoomSettings(room *Room, setting *model.RoomSettings) error {
 }
 
 func (u *User) UpdateRoomSettings(room *Room, settings map[string]any) error {
+	for key, value := range settings {
+		if strings.EqualFold(strings.ReplaceAll(key, "_", ""), "OwnerControl") {
+			if !room.IsCreator(u.ID) {
+				return model.ErrNoPermission
+			}
+			if _, valid := value.(bool); !valid || key != "owner_control" {
+				return errors.New("invalid owner_control setting")
+			}
+		}
+	}
 	if !u.HasRoomAdminPermission(room, model.PermissionSetRoomSettings) {
 		return model.ErrNoPermission
 	}

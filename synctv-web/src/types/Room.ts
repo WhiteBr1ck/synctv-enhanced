@@ -52,6 +52,11 @@ export enum RoomAdminPermission {
 }
 
 export interface MyInfo {
+
+  ownerControl: boolean;
+  isOwner: boolean;
+  canControlPlayback: boolean;
+  canChangeMovie: boolean;
   userId: string;
   roomId: string;
   joinAt: number;

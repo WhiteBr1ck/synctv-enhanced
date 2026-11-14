@@ -141,7 +141,7 @@ test('tapping send while editing keeps the keyboard in place until click', () =>
   } finally {f.destroy();f.restore();}
 });
 
-test('toolbar taps stay stable while editing and exiting fullscreen dismisses input afterwards', async () => {
+test('toolbar taps stay stable on touch while clicking controls or player dismisses input', async () => {
   const f=fixture();
   try {
     f.fullscreen(true);f.focus();
@@ -149,11 +149,32 @@ test('toolbar taps stay stable while editing and exiting fullscreen dismisses in
     const down=new Event('pointerdown',{cancelable:true});f.controls.dispatchEvent(down);
     assert.equal(down.defaultPrevented,true);
     assert.equal(f.player.style.getPropertyValue('--synctv-keyboard-inset'),'424px');
-    f.fullscreen(false);await tick();
+    f.controls.click();await tick();
     assert.equal(f.art.isInput,false);
     assert.equal(f.player.classList.contains('synctv-danmuku-editing'),false);
     assert.equal(f.player.style.getPropertyValue('--synctv-keyboard-inset'),'0px');
     assert.equal(f.input.value,'draft');
+    f.focus();
+    f.fullscreen(false);await tick();
+    assert.equal(f.art.isInput,false);
+    assert.equal(f.player.classList.contains('synctv-danmuku-editing'),false);
+  } finally {f.destroy();f.restore();}
+});
+
+test('desktop clicking elsewhere on bottom bar immediately blurs danmuku input so UI can hide', async () => {
+  const f=fixture(desktop);
+  try {
+    f.focus();
+    assert.equal(f.art.isInput,true);
+    assert.equal(f.player.classList.contains('synctv-danmuku-editing'),true);
+    const down=new Event('pointerdown',{cancelable:true});
+    f.controls.dispatchEvent(down);
+    await tick();
+    assert.equal(down.defaultPrevented,false);
+    assert.equal(f.art.isInput,false);
+    assert.equal(f.player.classList.contains('synctv-danmuku-editing'),false);
+    f.art.controls.show=false;
+    assert.equal(f.art.controls.show,false);
   } finally {f.destroy();f.restore();}
 });
 

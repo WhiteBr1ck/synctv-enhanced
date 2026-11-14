@@ -56,6 +56,7 @@ export default function artplayerPluginAss(options = {}) {
       const abort = request;
       try {
         const item = typeof track === "string" ? { url: track, fonts: [] } : track;
+        art.emit("artplayer-plugin-ass:status", { state: "loading", fonts: (item.fonts || []).length });
         const [worker, content] = await Promise.all([loadWorker(), item.content !== undefined ? Promise.resolve(item.content) : fetch(item.url, { signal: abort.signal }).then(response => {
           if (!response.ok) throw new Error("ASS 字幕读取失败");
           return response.text();
@@ -75,6 +76,7 @@ export default function artplayerPluginAss(options = {}) {
           fonts: (item.fonts || []).map(absolute),
           onReady: () => {
             if (disposed || current !== generation) return;
+            art.emit("artplayer-plugin-ass:status", { state: "ready" });
             refresh();
             const timer = setTimeout(() => {
               swaps.delete(timer);
@@ -84,7 +86,12 @@ export default function artplayerPluginAss(options = {}) {
             }, 200);
             swaps.add(timer);
           },
-          onError: () => { if (!disposed) art.notice.show = "ASS 字幕显示失败，请重新选择字幕"; }
+          onError: () => {
+            if (!disposed && current === generation) {
+              art.emit("artplayer-plugin-ass:status", { state: "error" });
+              art.notice.show = "ASS 字幕显示失败，请重新选择字幕";
+            }
+          }
         });
         instance.timeOffset = offset;
         instance.canvasParent.className = "artplayer-plugin-ass";
@@ -106,7 +113,10 @@ export default function artplayerPluginAss(options = {}) {
         setVisible(visible);
         refresh();
       } catch {
-        if (!disposed && current === generation) art.notice.show = "字幕渲染器加载失败，请重新选择字幕";
+        if (!disposed && current === generation) {
+          art.emit("artplayer-plugin-ass:status", { state: "error" });
+          art.notice.show = "字幕渲染器加载失败，请重新选择字幕";
+        }
       }
     };
     art.on("artplayer-plugin-ass:switch", (track) => { setVisible(true); void select(track); });

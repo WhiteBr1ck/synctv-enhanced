@@ -166,6 +166,7 @@
   min-width: 0;
 }
 .art-video-player.synctv-unified-player .art-controls-center .apd-emitter {
+  box-sizing: border-box;
   width: auto;
   min-width: 0;
   flex: 1;
@@ -173,12 +174,24 @@
   border: 1px solid #ffffff20;
   background: #18202cbf;
   height: 36px;
+  transition: border-color 0.15s;
+}
+.art-video-player.synctv-unified-player .art-controls-center .apd-emitter:has(.apd-input:focus) {
+  border-color: #75a7ff;
 }
 .art-video-player.synctv-unified-player .apd-input {
   font-size: 16px;
   line-height: normal;
   padding: 0 6px;
   min-width: 0;
+}
+.art-video-player.synctv-unified-player .apd-input:focus,
+.art-video-player.synctv-unified-player .apd-input:focus-visible {
+  outline: none;
+}
+.art-video-player.synctv-unified-player .apd-send:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
 }
 .art-video-player.synctv-unified-player .apd-style[hidden] {
   display: none;
@@ -298,15 +311,17 @@
   color: #dbeafe;
   border-radius: 5px;
   font-size: 12px;
+  line-height: 1.2;
   pointer-events: none;
+  transition:
+    opacity 0.15s,
+    visibility 0.15s;
 }
 .synctv-follow-status[hidden] {
   display: none;
 }
-.art-video-player:is(.art-fullscreen, .art-fullscreen-web):not(.art-control-show):not(
-    .synctv-danmuku-editing
-  )
-  .synctv-follow-status {
+.art-video-player:not(.art-control-show):not(.synctv-danmuku-editing) .synctv-follow-status,
+.art-video-player:not(.art-control-show):not(.synctv-danmuku-editing) .synctv-network-speed {
   opacity: 0;
   visibility: hidden;
 }

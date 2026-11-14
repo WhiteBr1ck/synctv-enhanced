@@ -52,6 +52,7 @@ const p2pOperation = {
       p2pEngine.value.enableP2P();
       p2pStats.value = undefined;
     }
+    if (art && !art.isDestroy) art.emit("synctv:network-reset" as any);
   },
   disableP2P: () => {
     defaultP2PEnabled.value = false;
@@ -59,6 +60,7 @@ const p2pOperation = {
       p2pEngine.value.disableP2P();
       p2pStats.value = undefined;
     }
+    if (art && !art.isDestroy) art.emit("synctv:network-reset" as any);
   }
 };
 
@@ -342,8 +344,27 @@ const playM3u8 = async (player: HTMLMediaElement, url: string, art: Artplayer) =
   p2pConfig.hlsjsInstance = hls;
 
   const engine = new P2pEngineHls(p2pConfig);
+  let sawEngineStats = false;
+  let fallbackHttpBytes = 0;
 
-  engine.on("stats", (stats) => recordTransferStats(stats, engine, art));
+  engine.on("stats", (stats) => {
+    sawEngineStats = true;
+    recordTransferStats(stats, engine, art);
+  });
+  hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
+    if (p2pEngine.value !== engine || art.isDestroy) return;
+    if (defaultP2PEnabled.value && sawEngineStats) return;
+    fallbackHttpBytes += data.payload?.byteLength || 0;
+    art.emit("synctv:network" as any, {
+      totalHTTPDownloaded: fallbackHttpBytes / 1024,
+      totalP2PDownloaded: 0,
+      totalP2PUploaded: 0
+    });
+  });
+  art.on("synctv:network-reset" as any, () => {
+    sawEngineStats = false;
+    fallbackHttpBytes = 0;
+  });
 
   hls.once(Hls.Events.DESTROYING, () => {
     resetP2P();
@@ -523,19 +544,18 @@ const cleanHotKeyEvent = (art: Artplayer, keys: number[]) => {
 
 // 格式化字节数的函数
 const formatKBytes = (kB: number) => {
-  if (kB === 0) return "0 KB";
+  if (kB <= 0) return "0.00 KB";
   const k = 1024;
   const sizes = ["KB", "MB", "GB"];
-  const i = Math.floor(Math.log(kB) / Math.log(k));
-  return `${parseFloat((kB / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  const i = Math.max(0, Math.min(sizes.length - 1, Math.floor(Math.log(kB) / Math.log(k))));
+  return `${(kB / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
 };
 
 const toggleP2P = (e: boolean) => {
-  if (!p2pEngine.value) return;
   if (e) {
-    p2pEngine.value.enableP2P();
+    p2pOperation.enableP2P();
   } else {
-    p2pEngine.value.disableP2P();
+    p2pOperation.disableP2P();
   }
 };
 
@@ -575,22 +595,22 @@ onBeforeUnmount(() => {
       <div v-if="defaultP2PEnabled && p2pStats" class="flex space-x-4 text-sm">
         <div class="flex items-center space-x-1">
           <el-tooltip content="HTTP下载量">
-            <span>↓HTTP: {{ formatKBytes(p2pStats.totalHTTPDownloaded) }}</span>
+            <span class="p2p-stat-item">↓HTTP: {{ formatKBytes(p2pStats.totalHTTPDownloaded) }}</span>
           </el-tooltip>
         </div>
         <div class="flex items-center space-x-1">
           <el-tooltip content="P2P下载量">
-            <span>↓P2P: {{ formatKBytes(p2pStats.totalP2PDownloaded) }}</span>
+            <span class="p2p-stat-item">↓P2P: {{ formatKBytes(p2pStats.totalP2PDownloaded) }}</span>
           </el-tooltip>
         </div>
         <div class="flex items-center space-x-1">
           <el-tooltip content="P2P上传量">
-            <span>↑P2P: {{ formatKBytes(p2pStats.totalP2PUploaded) }}</span>
+            <span class="p2p-stat-item">↑P2P: {{ formatKBytes(p2pStats.totalP2PUploaded) }}</span>
           </el-tooltip>
         </div>
         <div class="flex items-center space-x-1">
           <el-tooltip content="P2P下载速度">
-            <span>Speed: {{ formatKBytes(p2pStats.p2pDownloadSpeed) }}/s</span>
+            <span class="p2p-stat-speed">Speed: {{ formatKBytes(p2pStats.p2pDownloadSpeed) }}/s</span>
           </el-tooltip>
         </div>
       </div>
@@ -603,5 +623,16 @@ onBeforeUnmount(() => {
   background-color: rgba(0, 0, 0, 0.03);
   border-radius: 4px;
   padding: 8px;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 768px) {
+  .p2p-panel .p2p-stat-item {
+    display: inline-block;
+    min-width: 118px;
+  }
+  .p2p-panel .p2p-stat-speed {
+    display: inline-block;
+    min-width: 132px;
+  }
 }
 </style>

@@ -18,13 +18,20 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
     const speedBadge = document.createElement("div");
     speedBadge.className = "synctv-network-speed";
     speedBadge.setAttribute("aria-label", "实时下载速度");
+    const speedArrow = document.createElement("span");
+    speedArrow.className = "synctv-network-speed-arrow";
+    speedArrow.textContent = "↓";
+    const speedValue = document.createElement("span");
+    speedValue.className = "synctv-network-speed-value";
+    speedValue.textContent = "0.0 KB/s";
+    speedBadge.append(speedArrow, " ", speedValue);
     art.template.$player.append(speedBadge);
     const preference = "synctv-network-speed";
     let showSpeed = art.storage.get(preference) !== false;
     speedBadge.hidden = !showSpeed;
     art.setting.add({
       name: "network-speed",
-      html: "常驻网速",
+      html: "网速显示",
       icon: icon("network"),
       switch: showSpeed,
       onSwitch: () => {
@@ -75,6 +82,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       playback: "播放方式",
       depth: "色深",
       audio: "音频",
+      subtitle: "字幕加载状态",
       network: "网速",
       buffer: "缓冲",
       waiting: "缓冲等待",
@@ -100,9 +108,10 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
     };
     const refreshNetwork = () => {
       const speed = transfer.rates();
-      const download = speed ? formatTransferRate(speed.download) : "—";
-      speedBadge.textContent = `↓ ${download}`;
-      set("network", speed ? `↓ ${download} · ↑ ${formatTransferRate(speed.upload)}` : "—");
+      const download = formatTransferRate(speed?.download ?? 0);
+      const upload = formatTransferRate(speed?.upload ?? 0);
+      if (speedValue.textContent !== download) speedValue.textContent = download;
+      set("network", `↓ ${download} · ↑ ${upload}`);
     };
     const networkTimer = setInterval(refreshNetwork, 1000);
     const refresh = () => {
@@ -136,6 +145,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
       set("playback", summary.transcoded ? "转码" : "直通");
       set("depth", summary.depth ? `${summary.depth} bit` : "—");
       set("audio", summary.audio);
+      set("subtitle", art.plugins?.artplayerSubtitle?.status?.() || "无可用字幕");
       set("range", summary.dynamicRange);
       refreshNetwork();
       let ahead = 0;
@@ -166,6 +176,10 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
         if (!controller.signal.aborted) refresh();
       }
     };
+    const onSubtitleStatus = () => {
+      if (!disposed && art.info.show) refresh();
+    };
+    art.on("synctv:subtitle-status" as any, onSubtitleStatus);
     art.on("info", (show: boolean) => {
       clearInterval(timer);
       if (show) {
@@ -176,6 +190,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
     });
     art.on("destroy", () => {
       disposed = true;
+      art.off("synctv:subtitle-status" as any, onSubtitleStatus);
       request?.abort();
       clearInterval(timer);
       clearInterval(networkTimer);

@@ -38,7 +38,14 @@ export function artplayerSubtitle(
       manual = false,
       disposed = false,
       textMode = false,
-      loading = false;
+      loading = false,
+      extractingSince = 0,
+      loadError = "",
+      discoveryPending = Boolean(discovery),
+      discoveryError = false,
+      folderInitialPending = Boolean(folder),
+      assState: "idle" | "loading" | "ready" | "error" = "idle",
+      assFontsCount = 0;
     let textCues: TextCue[] = [];
     const discoveryAbort = new AbortController();
     const folderAbort = new AbortController();
@@ -78,6 +85,46 @@ export function artplayerSubtitle(
     for (const event of ["video:timeupdate", "video:seeked", "ready", "restart"])
       art.on(event as any, refresh);
     const emit = (name: string, value: unknown) => art.emit(name as any, value);
+    const status = (now = Date.now()) => {
+      const item = selected ? items.get(selected) : undefined;
+      const label = item ? trackLabel(item, "当前字幕") : "";
+      if (loading && item) {
+        if (extractingSince > 0) {
+          const sec = Math.max(1, Math.floor((now - extractingSince) / 1000));
+          return `提取内封字幕中（${sec} 秒）· ${label}`;
+        }
+        return `读取字幕中 · ${label}`;
+      }
+      if (loadError) return `加载失败 · ${loadError}`;
+      if (item && /^(ass|ssa)$/i.test(item.type)) {
+        if (assState === "loading") {
+          return assFontsCount > 0
+            ? `加载字体与渲染器（${assFontsCount} 个字体）· ${label}`
+            : `初始化字幕渲染器 · ${label}`;
+        }
+        if (assState === "error") return `渲染失败 · ${label}`;
+        if (discoveryPending && !item.fonts?.length) return `已就绪（字体探测中）· ${label}`;
+      }
+      if (item) return `已就绪 · ${label}`;
+      if (items.size === 0) {
+        if (discoveryPending || folderInitialPending) return "探测字幕轨道中…";
+        if (discoveryError) return "字幕轨道探测失败";
+        return "无可用字幕";
+      }
+      return discoveryPending
+        ? `已关闭（正在探测更多轨道，当前 ${items.size} 条）`
+        : `已关闭（共 ${items.size} 条可用）`;
+    };
+    const notifyStatus = () => {
+      if (!disposed) emit("synctv:subtitle-status", status());
+    };
+    const onAssStatus = (payload: { state: "loading" | "ready" | "error"; fonts?: number }) => {
+      if (!payload?.state) return;
+      assState = payload.state;
+      assFontsCount = payload.fonts || 0;
+      notifyStatus();
+    };
+    art.on("artplayer-plugin-ass:status" as any, onAssStatus);
     const version = (item?: Subtitle) => JSON.stringify([item?.url || "", item?.fonts || [], item?.fontFiles || []]);
     const select = async (key: string, isManual = false) => {
       selected = key;
@@ -86,10 +133,16 @@ export function artplayerSubtitle(
       const controller = (selectAbort = new AbortController());
       const item = items.get(key);
       loading = !!item;
+      extractingSince = 0;
+      loadError = "";
+      assState = "idle";
+      assFontsCount = 0;
       selectedVersion = version(item);
       const clear = () => {
         textMode = false;
         textCues = [];
+        assState = "idle";
+        assFontsCount = 0;
         art.subtitle.show = false;
         art.template.$subtitle.textContent = "";
         emit("artplayer-plugin-ass:visible", false);
@@ -114,9 +167,11 @@ export function artplayerSubtitle(
           /* storage */
         }
       update();
+      notifyStatus();
       if (!item) {
         clear();
         selectAbort = undefined;
+        notifyStatus();
         return;
       }
       try {
@@ -136,6 +191,8 @@ export function artplayerSubtitle(
             break;
           }
           if (Date.now() >= deadline) throw new Error("字幕提取等待超时，请重新选择字幕");
+          if (!extractingSince) extractingSince = Date.now();
+          notifyStatus();
           art.notice.show = loadingNotice;
           const seconds = Number(response.headers?.get("Retry-After")) || 1;
           await new Promise<void>((resolve, reject) => {
@@ -161,12 +218,17 @@ export function artplayerSubtitle(
           refresh();
         }
       } catch (error: any) {
-        if (!disposed && !controller.signal.aborted) art.notice.show = error.message;
+        if (!disposed && !controller.signal.aborted) {
+          loadError = error?.message || "字幕读取失败";
+          art.notice.show = error.message;
+        }
       } finally {
         if (selectAbort === controller) {
           selectAbort = undefined;
           loading = false;
+          extractingSince = 0;
           update();
+          notifyStatus();
           choose();
         }
       }
@@ -265,7 +327,15 @@ export function artplayerSubtitle(
     // Jellyfin's existing subtitle URL is usable immediately. Probing the
     // original file (including fonts) must not hold up subtitles after a switch.
     choose();
-    if (folder) void loadFolder().catch(() => { /* Manual picker exposes errors and retry. */ });
+    if (folder)
+      void loadFolder()
+        .catch(() => {
+          /* Manual picker exposes errors and retry. */
+        })
+        .finally(() => {
+          folderInitialPending = false;
+          notifyStatus();
+        });
     if (discovery)
       void (async () => {
         try {
@@ -273,6 +343,7 @@ export function artplayerSubtitle(
           if (!response.ok) throw new Error("字幕轨道读取失败");
           const { tracks } = (await response.json()) as { tracks: Track[] };
           if (disposed) return;
+          discoveryPending = false;
           for (const track of tracks) {
             if (track.fonts?.length) attachedFonts = { fonts: track.fonts, fontFiles: track.fontFiles };
             let metadata: Subtitle | undefined;
@@ -293,19 +364,26 @@ export function artplayerSubtitle(
           }
           for (const [key, item] of items) if (item.headers && /^(ass|ssa)$/i.test(item.type)) items.set(key, { ...item, ...attachedFonts });
           update();
+          notifyStatus();
           choose();
         } catch {
-          if (!disposed) choose();
+          if (!disposed) {
+            discoveryPending = false;
+            discoveryError = true;
+            notifyStatus();
+            choose();
+          }
         }
       })();
     art.on("fullscreen", update);
     art.on("destroy", () => {
       disposed = true;
+      art.off?.("artplayer-plugin-ass:status" as any, onAssStatus);
       discoveryAbort.abort();
       folderAbort.abort();
       picker?.close();
       selectAbort?.abort();
     });
-    return { name: "artplayerSubtitle" };
+    return { name: "artplayerSubtitle", status };
   };
 }

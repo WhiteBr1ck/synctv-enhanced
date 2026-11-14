@@ -35,6 +35,23 @@ export default function artplayerPluginDanmukuInput(device: Device = navigator) 
       }
     }
 
+    function isTextEntry(el: Element | null) {
+      if (!el) return false;
+      if (el.tagName === "TEXTAREA") return true;
+      if (el.tagName !== "INPUT") return false;
+      const type = (el.getAttribute("type") || "text").toLowerCase();
+      return !["range", "checkbox", "radio", "button", "submit", "reset"].includes(type);
+    }
+
+    function isDanmukuTarget(target: EventTarget | null) {
+      if (!target) return false;
+      if (target === input || target === send) return true;
+      const node = target as Node & { closest?: (selector: string) => unknown };
+      if (input && typeof input.contains === "function" && input.contains(node)) return true;
+      if (send && typeof send.contains === "function" && send.contains(node)) return true;
+      return typeof node.closest === "function" && !!node.closest(".apd-input, .apd-send");
+    }
+
     function updateViewport() {
       if (destroyed) return;
       // Move only the controls. Resizing the video would also resize ASS canvases.
@@ -52,9 +69,8 @@ export default function artplayerPluginDanmukuInput(device: Device = navigator) 
         focusState.isInput = true;
         art.controls.show = true;
       } else {
-        const active = document.activeElement;
-        focusState.isInput = !!active && $player.contains(active) &&
-          (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+        const active = document.activeElement as Element | null;
+        focusState.isInput = !!active && $player.contains(active) && isTextEntry(active);
       }
       updateViewport();
     }
@@ -100,12 +116,37 @@ export default function artplayerPluginDanmukuInput(device: Device = navigator) 
     }
 
     if (art.template.$controls) {
-      listen(art.template.$controls, "pointerdown", (event) => {
-        const target = event.target as Element | null;
-        if (input && document.activeElement === input &&
-          !target?.closest("input, textarea, select, [contenteditable]")) event.preventDefault();
+      const toolbar = art.template.$bottom || art.template.$controls;
+      listen(toolbar, "pointerdown", (event) => {
+        if (!input || document.activeElement !== input || isDanmukuTarget(event.target)) return;
+        if (appleTouch) {
+          // Keep the lifted toolbar steady until click lands on the tapped control.
+          event.preventDefault();
+        } else {
+          input.blur();
+        }
       }, { passive: false });
+      if (toolbar !== $player) {
+        listen(toolbar, "click", (event) => {
+          if (input && document.activeElement === input && !isDanmukuTarget(event.target)) {
+            input.blur();
+          }
+          queueMicrotask(updateFocus);
+        });
+      }
     }
+
+    listen($player, "pointerdown", (event) => {
+      if (!appleTouch && input && document.activeElement === input && !isDanmukuTarget(event.target)) {
+        input.blur();
+      }
+    });
+    listen($player, "click", (event) => {
+      if (input && document.activeElement === input && !isDanmukuTarget(event.target)) {
+        input.blur();
+      }
+      queueMicrotask(updateFocus);
+    });
 
     const keepControls = (show: boolean) => {
       if (!show && input && document.activeElement === input) art.controls.show = true;

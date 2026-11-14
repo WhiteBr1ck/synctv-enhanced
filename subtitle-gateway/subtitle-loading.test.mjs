@@ -153,3 +153,38 @@ test('folder read failures leave playback alone and allow a manual retry and ref
   assert.deepEqual(calls,['folder?movieId=one','folder?movieId=one','folder?movieId=one&refresh=1']);
  }finally{art.emit('destroy');delete globalThis.pickFolderSubtitle;delete globalThis.loadFolderSubtitles;globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
 });
+
+test('reports subtitle loading status across discovery, embedded extraction, ASS font loading, ready, and close',async()=>{
+ const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage;
+ const discovery=deferred(),firstPoll=deferred(),secondPoll=deferred();
+ let pollCount=0;
+ globalThis.localStorage={getItem:()=>null,setItem(){}};
+ globalThis.fetch=async url=>{
+  if(url==='tracks')return discovery.promise;
+  if(url.startsWith('/_synctv/subtitles/abc/track-2.ass')){
+   pollCount++;
+   return pollCount===1?firstPoll.promise:secondPoll.promise;
+  }
+  throw new Error(`Unexpected fetch: ${url}`);
+ };
+ const art=player();
+ try{
+  const plugin=artplayerSubtitle({},'tracks',true)(art);
+  assert.equal(plugin.status(),'探测字幕轨道中…');
+  discovery.resolve({ok:true,json:async()=>({tracks:[{url:'/_synctv/subtitles/abc/track-2.ass',type:'ass',index:2,language:'chi',title:'简体',default:true,fonts:['f1.ttf','f2.ttf']}]})});
+  await tick();
+  assert.match(plugin.status(),/^读取字幕中 · 内封 · 中文 · ASS · 简体/);
+  firstPoll.resolve({status:202,ok:false,headers:{get:()=>'0.05'}});
+  await tick();
+  assert.match(plugin.status(),/^提取内封字幕中（\d+ 秒）· 内封 · 中文 · ASS · 简体/);
+  await new Promise(resolve=>setTimeout(resolve,65));
+  secondPoll.resolve(text('[Script Info]\nTitle: Demo\n'));
+  await tick();
+  art.emit('artplayer-plugin-ass:status',{state:'loading',fonts:2});
+  assert.match(plugin.status(),/^加载字体与渲染器（2 个字体）· 内封 · 中文 · ASS · 简体/);
+  art.emit('artplayer-plugin-ass:status',{state:'ready'});
+  assert.match(plugin.status(),/^已就绪 · 内封 · 中文 · ASS · 简体/);
+  art.select('');await tick();
+  assert.equal(plugin.status(),'已关闭（共 1 条可用）');
+ }finally{art.emit('destroy');globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
+});

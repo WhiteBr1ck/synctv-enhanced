@@ -44,30 +44,24 @@
   opacity: 0.75;
 }
 .art-video-player .synctv-network-speed {
-  position: absolute;
-  z-index: 45;
-  top: 42px;
-  right: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
   box-sizing: border-box;
+  height: 24px;
   min-width: 112px;
-  padding: 4px 8px;
+  padding: 0 8px;
   border: 1px solid #ffffff26;
   border-radius: 5px;
   background: #101827b8;
   color: #fff;
   font-size: 12px;
-  line-height: 1.2;
+  line-height: 1;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 2px #000;
   pointer-events: none;
-  transition:
-    opacity 0.15s,
-    visibility 0.15s;
 }
 .art-video-player .synctv-network-speed-value {
   flex: 1;

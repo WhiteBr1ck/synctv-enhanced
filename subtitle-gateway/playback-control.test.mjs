@@ -8,6 +8,7 @@ source=source.replace('import { useDebounceFn } from "@vueuse/core";', 'const us
 source=source.replace('import { Message, MessageType, type Status } from "@/proto/message";', 'const Message={create:value=>value};const MessageType={STATUS:1,SYNC:2,CHECK_STATUS:3,EXPIRED:4};');
 source=source.replace('import { ElNotification } from "element-plus";', 'const ElNotification=()=>{};');
 source=source.replace('"@/utils/sync-preferences"',JSON.stringify(new URL('../synctv-web/src/utils/sync-preferences.ts',import.meta.url).href));
+source=source.replace('"../utils/player-top-bar"',JSON.stringify(new URL('../synctv-web/src/utils/player-top-bar.ts',import.meta.url).href));
 source=source.replace('"./icons"',JSON.stringify(new URL('../synctv-web/src/plugins/icons.ts',import.meta.url).href));
 const {newSyncPlugin}=await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source,{mode:'transform'})).toString('base64'));
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -45,7 +46,8 @@ test('viewer pause survives periodic checks and owner actions without publishing
  const f=fixture();
  try{
   f.pause();assert.equal(f.plugin.isLocallyPaused(),true);
-  assert.equal(f.art.template.$player.children[0].textContent,'已暂停跟随');
+  assert.equal(f.art.template.$player.children[0].className,'synctv-top-badges');
+  assert.equal(f.art.template.$player.children[0].children[0].textContent,'已暂停跟随');
   const room={isPlaying:true,currentTime:200,playbackRate:1};
   assert.equal(f.plugin.automaticStatus(room),false);
   await f.plugin.setAndNoPublishStatus(room,'成员操作');

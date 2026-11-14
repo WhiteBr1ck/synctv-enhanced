@@ -10,6 +10,7 @@ import {
   syncTolerances,
   syncIntervals
 } from "@/utils/sync-preferences";
+import { mountTopRightBadge } from "../utils/player-top-bar";
 import { icon } from "./icons";
 
 export interface PlaybackAccess {
@@ -43,7 +44,7 @@ export const newSyncPlugin =
     const badge = document.createElement("div");
     badge.className = "synctv-follow-status";
     badge.setAttribute("aria-live", "polite");
-    $player.append(badge);
+    mountTopRightBadge($player, badge, "start");
     const restricted = () => !getAccess().canControlPlayback;
     const publish = (message: Message) => !disposed && sendStatus(message);
     const currentStatus = (): Status => ({

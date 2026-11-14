@@ -60,11 +60,15 @@
   color: var(--synctv-srt-color, #fff) !important;
 }
 .art-video-player .art-layer-movie-title {
+  --synctv-pad-follow: 108px;
+  --synctv-pad-speed: 142px;
+  --synctv-pad-both: 228px;
   position: absolute;
   inset: 0 0 auto;
   box-sizing: border-box;
-  padding: 12px 16px 24px;
+  padding: 12px calc(16px + var(--synctv-right-obstruction, 0px)) 16px 16px;
   font-size: 16px;
+  line-height: 24px;
   font-weight: 600;
   color: #fff;
   text-shadow: 0 1px 3px #000;
@@ -76,8 +80,23 @@
   opacity: 0;
   transition: opacity 0.15s;
 }
+.art-video-player:has(.synctv-top-badges .synctv-follow-status:not([hidden]))
+  .art-layer-movie-title {
+  padding-right: calc(var(--synctv-pad-follow) + var(--synctv-right-obstruction, 0px));
+}
+.art-video-player:has(.synctv-top-badges .synctv-network-speed:not([hidden]))
+  .art-layer-movie-title {
+  padding-right: calc(var(--synctv-pad-speed) + var(--synctv-right-obstruction, 0px));
+}
+.art-video-player:has(.synctv-top-badges .synctv-follow-status:not([hidden])):has(
+    .synctv-top-badges .synctv-network-speed:not([hidden])
+  )
+  .art-layer-movie-title {
+  padding-right: calc(var(--synctv-pad-both) + var(--synctv-right-obstruction, 0px));
+}
 .art-video-player.art-control-show .art-layer-movie-title,
-.art-video-player.art-mask-show .art-layer-movie-title {
+.art-video-player.art-mask-show .art-layer-movie-title,
+.art-video-player.synctv-danmuku-editing .art-layer-movie-title {
   opacity: 1;
 }
 .chat-new-messages {
@@ -300,30 +319,69 @@
   min-height: 42px !important;
   flex-shrink: 0;
 }
-.synctv-follow-status {
+.art-video-player .synctv-top-badges {
   position: absolute;
   z-index: 45;
-  top: 42px;
-  left: 14px;
-  padding: 4px 8px;
-  border: 1px solid #ffffff26;
-  background: #101827b8;
-  color: #dbeafe;
-  border-radius: 5px;
-  font-size: 12px;
-  line-height: 1.2;
+  top: var(--synctv-top-badges-top, 12px);
+  right: var(--synctv-top-badges-right, calc(14px + var(--synctv-right-obstruction, 0px)));
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   pointer-events: none;
   transition:
     opacity 0.15s,
     visibility 0.15s;
 }
+.art-video-player .synctv-top-badges:empty {
+  display: none;
+}
+.synctv-follow-status {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #ffffff26;
+  background: #101827b8;
+  color: #dbeafe;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+}
 .synctv-follow-status[hidden] {
   display: none;
 }
-.art-video-player:not(.art-control-show):not(.synctv-danmuku-editing) .synctv-follow-status,
-.art-video-player:not(.art-control-show):not(.synctv-danmuku-editing) .synctv-network-speed {
+.art-video-player:not(.art-control-show):not(.synctv-danmuku-editing) .synctv-top-badges {
   opacity: 0;
   visibility: hidden;
+}
+@container (max-width: 520px) {
+  .art-video-player .art-layer-movie-title {
+    --synctv-pad-follow: 90px;
+    --synctv-pad-speed: 118px;
+    --synctv-pad-both: 190px;
+    padding: 10px calc(12px + var(--synctv-right-obstruction, 0px)) 14px 12px;
+    font-size: 14px;
+    line-height: 22px;
+  }
+  .art-video-player .synctv-top-badges {
+    top: var(--synctv-top-badges-top, 10px);
+    right: var(--synctv-top-badges-right, calc(10px + var(--synctv-right-obstruction, 0px)));
+    gap: 6px;
+  }
+  .art-video-player .synctv-follow-status,
+  .art-video-player.synctv-unified-player .synctv-network-speed {
+    height: 22px;
+    padding: 0 6px;
+    font-size: 11px;
+  }
+  .art-video-player.synctv-unified-player .synctv-network-speed {
+    min-width: 98px;
+  }
 }
 .art-video-player.synctv-playback-readonly .art-progress {
   cursor: default;

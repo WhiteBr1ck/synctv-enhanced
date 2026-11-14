@@ -36,6 +36,7 @@ import { artplayerVideoInfo } from "@/plugins/video-info";
 import { artplayerSubtitleStyle } from "@/plugins/subtitle-style";
 import { artplayerEmbeddedAudio } from "@/plugins/audio";
 import { sendDanmu, artplayerStreamDanmu } from "@/plugins/danmu";
+import { danmukuSafeAreaOptions } from "@/utils/player-top-bar";
 import { indexStore } from "@/stores";
 import { useChatScroll } from "@/hooks/useChatScroll";
 
@@ -188,6 +189,7 @@ const playerOption = computed<options>(() => {
       artplayerPluginDanmuku({
         danmuku: room.currentMovie.base!.danmu || [],
         speed: 8,
+        ...danmukuSafeAreaOptions(),
         async beforeEmit(danmu: any) {
           if (danmu.direct) {
             return true;
@@ -985,11 +987,12 @@ onBeforeUnmount(() => {
   .theater-actions {position:absolute;right:10px;top:10px;z-index:100;display:flex;gap:8px;}
   .theater-actions button {background:#263244;color:#e5e7eb;border:1px solid #ffffff28;padding:6px 10px;border-radius:6px;font-size:12px;}
   &.cinema-sidebar-hidden .cinema-chat-column {display:none;}
-  &.cinema-sidebar-hidden :deep(.art-layer-movie-title) {padding-right:200px;}
+  &.cinema-sidebar-hidden :deep(.art-video-player) {--synctv-right-obstruction:170px;}
 }
 @media(max-width:600px) and (orientation:portrait) {
   .cinema-theater {
-    :deep(.art-layer-movie-title) {padding-right:200px;}
+    :deep(.art-layer-movie-title) {padding-right:190px !important;}
+    :deep(.art-video-player) {--synctv-right-obstruction:0px;--synctv-top-badges-right:10px;--synctv-top-badges-top:44px;}
     .cinema-stage-row {flex-direction:column;}
     .cinema-video-column {width:100%;flex:0 0 45%;}
     .cinema-chat-column {width:100%;max-width:none;flex:1;min-height:0;}

@@ -1,6 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';
+import fs from 'node:fs';import vm from 'node:vm';
 import {playbackSummary} from '../synctv-web/src/utils/playback-summary.ts';
 import {trackLabel,escapeLabel} from '../synctv-web/src/utils/track-label.ts';
+import {DANMUKU_TOP_SAFE_AREA,danmukuSafeAreaOptions,mountTopRightBadge} from '../synctv-web/src/utils/player-top-bar.ts';
 
 test('reports the selected H264 stream instead of the HEVC original probe',()=>{
   const info=playbackSummary({html:'H.264 兼容 · Episode',type:'m3u8',playbackMode:'transcode'},{codec:'hevc',bitDepth:10,dynamicRange:'HDR / PQ'},[{codec:'eac3',channels:6,default:true}]);
@@ -18,4 +20,50 @@ test('track labels preserve origin, language, codec and title without HTML injec
   assert.equal(trackLabel({origin:'external',language:'jpn',type:'ass',title:'Signs'},'Subtitle'),'外挂 · 日语 · ASS · Signs');
   assert.equal(trackLabel({origin:'embedded',language:'chi',codec:'aac',title:'国语',default:true},'Audio'),'内封 · 中文 · AAC · 国语（默认）');
   assert.equal(escapeLabel('<img src=x>'),'&lt;img src=x&gt;');
+});
+test('top-right badge container groups owner control and network speed in deterministic order',()=>{
+  const el=(className='')=>{
+    const node={
+      className,
+      children:[],
+      ownerDocument:{createElement:()=>el()},
+      classList:{contains:(name)=>node.className.split(/\s+/).includes(name)},
+      append(...items){this.children.push(...items);},
+      prepend(...items){this.children.unshift(...items);}
+    };
+    return node;
+  };
+  const player=el('art-video-player');
+  const speed=el('synctv-network-speed');
+  const follow=el('synctv-follow-status');
+  const first=mountTopRightBadge(player,speed,'end');
+  const second=mountTopRightBadge(player,follow,'start');
+  assert.equal(first,second);
+  assert.equal(player.children.length,1);
+  assert.equal(first.className,'synctv-top-badges');
+  assert.deepEqual(first.children.map(item=>item.className),['synctv-follow-status','synctv-network-speed']);
+});
+test('danmuku safe area keeps top lanes below movie title and matches slider steps',()=>{
+  const opts=danmukuSafeAreaOptions();
+  assert.equal(DANMUKU_TOP_SAFE_AREA,48);
+  assert.deepEqual(opts.margin,[48,'25%']);
+  const activeStep=opts.MARGIN.steps.findIndex(s=>s.value[0]===opts.margin[0]&&s.value[1]===opts.margin[1]);
+  assert.equal(opts.MARGIN.steps[activeStep]?.name,'3/4');
+  for(const step of opts.MARGIN.steps)assert.equal(step.value[0],DANMUKU_TOP_SAFE_AREA);
+
+  const workerSrc=fs.readFileSync(new URL('../synctv-web/node_modules/artplayer-plugin-danmuku/src/worker.js',import.meta.url),'utf8');
+  const ctx={self:{postMessage(){}},onmessage:null};
+  vm.runInNewContext(workerSrc,ctx);
+  for(const mode of [0,1]){
+    const top=ctx.getDanmuTop({
+      target:{mode,height:28,speed:180},
+      visibles:[],
+      antiOverlap:true,
+      clientWidth:960,
+      clientHeight:540,
+      marginTop:opts.margin[0],
+      marginBottom:540*0.25
+    });
+    assert.equal(top,48);
+  }
 });

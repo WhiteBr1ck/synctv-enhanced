@@ -3,6 +3,7 @@ import type { BaseMovieInfo } from "@/types/Movie";
 import type { VideoInfo } from "@/utils/video-info";
 import { playbackSummary } from "@/utils/playback-summary";
 import { TransferMeter, formatTransferRate, type TransferTotals } from "@/utils/transfer-meter";
+import { mountTopRightBadge } from "../utils/player-top-bar";
 import "./video-info.css";
 import { icon } from "./icons";
 
@@ -25,7 +26,7 @@ export function artplayerVideoInfo(initialContext: BaseMovieInfo) {
     speedValue.className = "synctv-network-speed-value";
     speedValue.textContent = "0.0 KB/s";
     speedBadge.append(speedArrow, " ", speedValue);
-    art.template.$player.append(speedBadge);
+    mountTopRightBadge(art.template.$player, speedBadge, "end");
     const preference = "synctv-network-speed";
     let showSpeed = art.storage.get(preference) !== false;
     speedBadge.hidden = !showSpeed;

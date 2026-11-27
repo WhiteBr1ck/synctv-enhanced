@@ -44,6 +44,15 @@ before(async () => {
     '-map', '0:v', '-map', '1:a', '-map', '2:a', '-c:v', 'libx264', '-preset', 'ultrafast',
     '-c:a', 'eac3', '-ac', '6', '-metadata:s:a:0', 'language=jpn', '-metadata:s:a:1', 'language=eng',
     '-disposition:a:0', 'default', '-disposition:a:1', '0', path.join(temp, 'movie.audio.mkv')]);
+  ffmpeg(['-f', 'lavfi', '-i', 'color=c=black:s=320x180:r=24:d=5',
+    '-itsoffset', '0.5', '-f', 'lavfi', '-i', 'sine=frequency=1000:sample_rate=48000:duration=4',
+    '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast',
+    '-c:a', 'eac3', '-ac', '6', path.join(temp, 'movie.delayed.mkv')]);
+  await writeFile(path.join(temp, 'long.srt'),
+    '1\n00:00:01,000 --> 00:00:03,000\nOpening line\n\n2\n00:00:26,000 --> 00:00:28,000\nMid-episode line\n');
+  ffmpeg(['-f', 'lavfi', '-i', 'color=c=black:s=160x90:r=12:d=30',
+    '-i', path.join(temp, 'long.srt'), '-map', '0:v', '-map', '1:0',
+    '-c:v', 'libx264', '-g', '24', '-preset', 'ultrafast', '-c:s', 'srt', path.join(temp, 'movie.long.mkv')]);
   await writeFile(path.join(temp, 'index.html'), '<html><body>Patched v0.9.15 UI</body></html>');
   upstream = http.createServer(async (req, res) => {
     if (req.url.startsWith('/media.')) {
@@ -244,6 +253,83 @@ test('rejects invalid audio positions and stops FFmpeg when the viewer disconnec
     for(let i=0;i<40&&gateway.store.audioStreams.size;i++)await new Promise(resolve=>setTimeout(resolve,25));
     assert.equal(gateway.store.audioStreams.size,0,'disconnect releases the compatibility audio process');
   } finally {extension='mkv';}
+});
+
+test('preserves non-zero MKV audio start_time offset at start=0 instead of shifting audio early', async () => {
+  extension = 'delayed.mkv';
+  try {
+    const discovery = await source();
+    const { audioTracks } = await (await fetch(origin + discovery)).json();
+    const response = await fetch(origin + audioTracks[0].url + '?start=0');
+    assert.equal(response.status, 200);
+    const file = path.join(temp, 'compat-delayed.mp4');
+    await writeFile(file, Buffer.from(await response.arrayBuffer()));
+    const decoded = spawnSync('ffmpeg', ['-v', 'error', '-i', file, '-f', 's16le', '-ac', '1', '-ar', '48000', 'pipe:1'], { maxBuffer: 2 * 1024 * 1024 });
+    assert.equal(decoded.status, 0);
+    const pcm = decoded.stdout;
+    // First 0.40s (19200 samples) must remain silent, while 0.65s..1.0s must carry the 1000Hz tone.
+    let earlyEnergy = 0, toneEnergy = 0;
+    for (let i = 0; i < 48000 * 0.40; i++) { const s = pcm.readInt16LE(i * 2); earlyEnergy += s * s; }
+    for (let i = Math.floor(48000 * 0.65); i < 48000; i++) { const s = pcm.readInt16LE(i * 2); toneEnergy += s * s; }
+    assert.ok(earlyEnergy < 1e5, `expected initial 0.5s silence to be preserved, got energy=${earlyEnergy}`);
+    assert.ok(toneEnergy > 1e8, `expected audio tone after 0.5s offset, got energy=${toneEnergy}`);
+  } finally { extension = 'mkv'; }
+});
+
+test('extracts all embedded text tracks in one pass and serves progressive partial cues & mid-episode slices', async () => {
+  const isolated = createGateway({ upstream: mediaOrigin, cacheDir: path.join(temp, 'single-pass-cache'), subtitleWaitMs: 400 });
+  const address = `http://127.0.0.1:${await listen(isolated.listener)}`;
+  try {
+    // 1. Single-pass multi-track caching on movie.mkv (ASS + SRT).
+    const disc = isolated.store.register({ id: 'batch', base: { type: 'mkv', url: `${mediaOrigin}/media.mkv`, vendorInfo: { vendor: 'alist' } } }, { 'user-agent': 'TestBrowser/1.0' });
+    const { tracks } = await (await fetch(address + disc)).json();
+    assert.equal(tracks.length, 2);
+    const first = await fetch(address + tracks[0].url);
+    assert.equal(first.status, 200);
+    assert.match(await first.text(), /Embedded ASS OK/);
+    const requestsAfterFirst = mediaRequests;
+    const second = await fetch(address + tracks[1].url);
+    assert.equal(second.status, 200);
+    assert.match(await second.text(), /Embedded SRT OK/);
+    assert.equal(mediaRequests, requestsAfterFirst, 'second subtitle track must be served from the first single-pass scan without re-reading the MKV');
+
+    // 2. Progressive partial delivery while background extraction is still running, plus mid-episode seek slice.
+    const longDisc = isolated.store.register({ id: 'long', base: { type: 'mkv', url: `${mediaOrigin}/media.long.mkv`, vendorInfo: { vendor: 'alist' } } }, { 'user-agent': 'TestBrowser/1.0' });
+    const { tracks: longTracks } = await (await fetch(address + longDisc)).json();
+    const key = longDisc.split('/')[3];
+    const sess = isolated.store.get(key);
+    let finishJob;
+    const liveFile = path.join(temp, 'live-progress.srt');
+    await writeFile(liveFile, '1\n00:00:01,000 --> 00:00:03,000\nOpening line\n\n');
+    const realFile = isolated.store.file.bind(isolated.store);
+    isolated.store.file = async () => {
+      sess.liveFiles.set(longTracks[0].index, { path: liveFile, type: 'srt' });
+      await new Promise(resolve => { finishJob = resolve; });
+      sess.liveFiles.delete(longTracks[0].index);
+      return path.join(temp, 'long.srt');
+    };
+    const partialRes = await fetch(address + longTracks[0].url, { headers: { 'X-Subtitle-Progressive': '1', 'X-Subtitle-Time': '2' } });
+    assert.equal(partialRes.status, 200);
+    assert.equal(partialRes.headers.get('x-subtitle-partial'), '1');
+    assert.match(await partialRes.text(), /Opening line/);
+
+    // Legacy client without X-Subtitle-Progressive still receives 202 until complete.
+    const legacyRes = await fetch(address + longTracks[0].url);
+    assert.equal(legacyRes.status, 202);
+
+    // Mid-episode request at t=25s slices cues around 26s immediately while full scan is only at 3s.
+    const sliceRes = await fetch(address + longTracks[0].url, { headers: { 'X-Subtitle-Progressive': '1', 'X-Subtitle-Time': '25' } });
+    assert.equal(sliceRes.status, 200);
+    assert.equal(sliceRes.headers.get('x-subtitle-partial'), '1');
+    assert.match(await sliceRes.text(), /00:00:26,000 --> 00:00:28,000[\s\S]*Mid-episode line/);
+
+    finishJob();
+    const fullRes = await fetch(address + longTracks[0].url, { headers: { 'X-Subtitle-Progressive': '1' } });
+    assert.equal(fullRes.status, 200);
+    assert.equal(fullRes.headers.get('x-subtitle-partial'), null);
+    assert.match(await fullRes.text(), /Mid-episode line/);
+    isolated.store.file = realFile;
+  } finally { await isolated.close(); }
 });
 test('reads ASS styles, SRT text and attached fonts without modifying the video', async () => {
   extension = 'mkv';

@@ -54,14 +54,47 @@ export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http:
         let file;
         if (isFont) file = await store.font(source, Number(match[5]));
         else {
-          const retry = new URL(req.url, 'http://gateway').searchParams.get('retry') === '1';
-          const job = await store.prepareFile(source, Number(match[3]), match[4], retry);
+          const params = new URL(req.url, 'http://gateway').searchParams;
+          const retry = params.get('retry') === '1';
+          const progressive = req.headers['x-subtitle-progressive'] === '1' || params.get('partial') === '1';
+          const atRaw = Number(req.headers['x-subtitle-time'] ?? params.get('at') ?? 0);
+          const at = Number.isFinite(atRaw) && atRaw > 0 && atRaw < 86400 ? atRaw : 0;
+          const index = Number(match[3]);
+          const type = match[4];
+          const job = await store.prepareFile(source, index, type, retry);
+          let partial = null;
           if (!job.file && !job.error) {
-            let timer;
-            try { await Promise.race([job.promise, new Promise(resolve => { timer = setTimeout(resolve, subtitleWaitMs); })]); }
-            finally { clearTimeout(timer); }
+            if (progressive) {
+              const deadline = Date.now() + subtitleWaitMs;
+              while (!job.file && !job.error) {
+                partial = await store.readPartial(source, index, type, at);
+                if (partial || Date.now() >= deadline) break;
+                let timer;
+                try {
+                  await Promise.race([job.promise, new Promise(resolve => { timer = setTimeout(resolve, Math.min(150, Math.max(10, deadline - Date.now()))); })]);
+                } finally { clearTimeout(timer); }
+              }
+            } else {
+              let timer;
+              try { await Promise.race([job.promise, new Promise(resolve => { timer = setTimeout(resolve, subtitleWaitMs); })]); }
+              finally { clearTimeout(timer); }
+            }
           }
           if (job.error) throw job.error;
+          if (!job.file && partial) {
+            const body = Buffer.from(partial.body, 'utf8');
+            res.writeHead(200, {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Content-Length': body.length,
+              'Cache-Control': 'no-store',
+              'Vary': 'X-Subtitle-Progressive',
+              'X-Content-Type-Options': 'nosniff',
+              'X-Subtitle-Partial': '1',
+              'X-Subtitle-Covered': String(Math.floor(partial.covered || 0)),
+              'Retry-After': '2'
+            });
+            return req.method === 'HEAD' ? res.end() : res.end(body);
+          }
           if (!job.file) {
             res.setHeader('Retry-After', '1');
             return json(res, 202, { status: 'processing' });
@@ -70,7 +103,9 @@ export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http:
         }
         const info = await stat(file);
         res.writeHead(200, { 'Content-Type': isFont ? 'application/octet-stream' : 'text/plain; charset=utf-8',
-          'Content-Length': info.size, 'Cache-Control': 'private, max-age=600', 'X-Content-Type-Options': 'nosniff' });
+          'Content-Length': info.size, 'Cache-Control': 'private, max-age=600',
+          ...(isFont ? {} : { 'Vary': 'X-Subtitle-Progressive' }),
+          'X-Content-Type-Options': 'nosniff' });
         if (req.method === 'HEAD') return res.end();
         const stream = createReadStream(file);
         stream.on('error', () => res.destroy());
@@ -206,7 +241,7 @@ export function createGateway({ upstream = process.env.SYNCTV_UPSTREAM || 'http:
   store.prune().catch(() => console.error('Subtitle cache initialization failed'));
   return { listener, store, close: async () => {
     clearInterval(prune);
-    for (const child of store.audioStreams) child.kill('SIGKILL');
+    store.close();
     for (const socket of sockets) socket.destroy();
     if (listener.listening) await new Promise(resolve => listener.close(resolve));
   } };

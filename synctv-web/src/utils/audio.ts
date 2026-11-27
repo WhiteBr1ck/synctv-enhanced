@@ -23,5 +23,6 @@ export function audioMime(codec: string) {
 export function audioCorrection(videoTime: number, audioTime: number, origin: number, rate: number) {
   const expected = Math.max(0, videoTime - origin);
   const drift = expected - audioTime;
-  return { expected, drift, rate: rate * (1 + Math.max(-0.04, Math.min(0.04, drift * 0.1))) };
+  const adjust = Math.abs(drift) < 0.025 ? 0 : Math.max(-0.04, Math.min(0.04, drift * 0.25));
+  return { expected, drift, rate: rate * (1 + adjust) };
 }

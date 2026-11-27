@@ -20,6 +20,28 @@ interface Track extends Subtitle {
   default: boolean;
   forced: boolean;
 }
+
+function normalizeLang(value?: string): string {
+  const raw = (value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (/^(zh|chi|zho|chs|cht|cmn)/.test(raw)) return "zh";
+  if (/^(en|eng)/.test(raw)) return "en";
+  if (/^(ja|jpn)/.test(raw)) return "ja";
+  if (/^(ko|kor)/.test(raw)) return "ko";
+  return raw;
+}
+
+function isChineseTrack(track: Subtitle): boolean {
+  if (normalizeLang(track.language) === "zh") return true;
+  return /中文|简体|繁体|簡體|繁體|双语|雙語|国语|國語|chs|cht|\b(sc|tc)\b/i.test(track.title || "");
+}
+
+function isSimplifiedChinese(track: Subtitle): boolean {
+  const label = `${track.language || ""} ${track.title || ""}`;
+  return /简体|简中|简日|简英|chs|hans|\bsc\b|simplified/i.test(label) &&
+    !/繁体|繁體|繁中|cht|hant|\btc\b|traditional/i.test(label);
+}
+
 export function artplayerSubtitle(
   subtitles: Record<string, Subtitle>,
   discovery?: string,
@@ -39,6 +61,8 @@ export function artplayerSubtitle(
       disposed = false,
       textMode = false,
       loading = false,
+      partial = false,
+      partialCovered = 0,
       extractingSince = 0,
       loadError = "",
       discoveryPending = Boolean(discovery),
@@ -54,6 +78,8 @@ export function artplayerSubtitle(
     let picker: ReturnType<typeof subtitlePicker> | undefined;
     let attachedFonts: Pick<Subtitle, "fonts" | "fontFiles"> = {};
     let selectAbort: AbortController | undefined;
+    let partialAbort: AbortController | undefined;
+    let wakePartial: (() => void) | undefined;
     let preference: any;
     try {
       preference = JSON.parse(localStorage.getItem("synctv:subtitle-track") || "null");
@@ -84,6 +110,9 @@ export function artplayerSubtitle(
     };
     for (const event of ["video:timeupdate", "video:seeked", "ready", "restart"])
       art.on(event as any, refresh);
+    art.on("video:seeked" as any, () => {
+      if (!disposed && partial && wakePartial && art.currentTime > partialCovered - 5) wakePartial();
+    });
     const emit = (name: string, value: unknown) => art.emit(name as any, value);
     const status = (now = Date.now()) => {
       const item = selected ? items.get(selected) : undefined;
@@ -103,9 +132,10 @@ export function artplayerSubtitle(
             : `初始化字幕渲染器 · ${label}`;
         }
         if (assState === "error") return `渲染失败 · ${label}`;
+        if (partial) return `已就绪（后台补全中）· ${label}`;
         if (discoveryPending && !item.fonts?.length) return `已就绪（字体探测中）· ${label}`;
       }
-      if (item) return `已就绪 · ${label}`;
+      if (item) return partial ? `已就绪（后台补全中）· ${label}` : `已就绪 · ${label}`;
       if (items.size === 0) {
         if (discoveryPending || folderInitialPending) return "探测字幕轨道中…";
         if (discoveryError) return "字幕轨道探测失败";
@@ -126,13 +156,105 @@ export function artplayerSubtitle(
     };
     art.on("artplayer-plugin-ass:status" as any, onAssStatus);
     const version = (item?: Subtitle) => JSON.stringify([item?.url || "", item?.fonts || [], item?.fontFiles || []]);
+    const sleep = (ms: number, signal: AbortSignal, registerWake?: (wake?: () => void) => void) =>
+      new Promise<void>((resolve, reject) => {
+        const done = () => {
+          clearTimeout(timer);
+          signal.removeEventListener("abort", abort);
+          registerWake?.(undefined);
+          resolve();
+        };
+        const abort = () => {
+          clearTimeout(timer);
+          registerWake?.(undefined);
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        const timer = setTimeout(done, ms);
+        registerWake?.(done);
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+      });
+    const requestHeaders = (item: Subtitle) => {
+      if (!/\/_synctv\/subtitles\//.test(item.url)) return item.headers;
+      return {
+        ...item.headers,
+        "X-Subtitle-Progressive": "1",
+        "X-Subtitle-Time": String(Math.floor(Math.max(0, art.currentTime || 0)))
+      };
+    };
+    const refreshPartial = async (
+      key: string,
+      item: Subtitle,
+      initialContent: string,
+      initialDelay: number
+    ) => {
+      partialAbort?.abort();
+      const controller = (partialAbort = new AbortController());
+      let lastContent = initialContent;
+      let delay = initialDelay;
+      const isAss = /^(ass|ssa)$/i.test(item.type);
+      const deadline = Date.now() + 1800000;
+      try {
+        while (!disposed && !controller.signal.aborted && selected === key && Date.now() < deadline) {
+          await sleep(Math.max(0.05, Math.min(8, delay)) * 1000, controller.signal, wake => {
+            if (partialAbort === controller) wakePartial = wake;
+          });
+          if (disposed || controller.signal.aborted || selected !== key) return;
+          const response = await fetch(item.url, { signal: controller.signal, headers: requestHeaders(item) });
+          if (disposed || controller.signal.aborted || selected !== key) return;
+          if (response.status === 202) {
+            delay = Number(response.headers?.get?.("Retry-After")) || 2;
+            continue;
+          }
+          if (!response.ok) return;
+          const stillPartial = response.headers?.get?.("X-Subtitle-Partial") === "1";
+          const next = await response.text();
+          if (disposed || controller.signal.aborted || selected !== key) return;
+          if (next && next !== lastContent) {
+            if (isAss) {
+              emit("artplayer-plugin-ass:update", resolveAssSubsetFonts(next, item.fontFiles));
+            } else {
+              const cues = parseTimedText(next);
+              if (cues.length) {
+                textCues = cues;
+                textMode = true;
+                art.subtitle.show = true;
+                refresh();
+              }
+            }
+            lastContent = next;
+          }
+          const covered = Number(response.headers?.get?.("X-Subtitle-Covered"));
+          if (Number.isFinite(covered) && covered > 0) partialCovered = Math.max(partialCovered, covered);
+          else if (!isAss && textCues.length) partialCovered = Math.max(partialCovered, textCues[textCues.length - 1].endTime);
+          if (!stillPartial) {
+            partial = false;
+            notifyStatus();
+            return;
+          }
+          delay = Math.max(isAss ? 4 : 2, Number(response.headers?.get?.("Retry-After")) || (isAss ? 4 : 2));
+        }
+      } catch {
+        /* Keep already displayed partial subtitles if background polling stops. */
+      } finally {
+        if (partialAbort === controller) {
+          partialAbort = undefined;
+          wakePartial = undefined;
+        }
+      }
+    };
     const select = async (key: string, isManual = false) => {
       selected = key;
       manual ||= isManual;
       selectAbort?.abort();
+      partialAbort?.abort();
+      partialAbort = undefined;
+      wakePartial = undefined;
       const controller = (selectAbort = new AbortController());
       const item = items.get(key);
       loading = !!item;
+      partial = false;
+      partialCovered = 0;
       extractingSince = 0;
       loadError = "";
       assState = "idle";
@@ -179,14 +301,20 @@ export function artplayerSubtitle(
         const loadingNotice = "正在提取内封字幕，请稍候…";
         let first = true;
         let content = "";
+        let isPartial = false;
+        let nextDelay = 2;
         while (true) {
           const retry = first && /\/_synctv\/subtitles\//.test(item.url);
           first = false;
           const url = retry ? `${item.url}${item.url.includes("?") ? "&" : "?"}retry=1` : item.url;
-          const response = await fetch(url, { signal: controller.signal, headers: item.headers });
+          const response = await fetch(url, { signal: controller.signal, headers: requestHeaders(item) });
           if (disposed || controller.signal.aborted) return;
           if (response.status !== 202) {
             if (!response.ok) throw new Error("字幕读取失败，请重新选择字幕");
+            isPartial = response.headers?.get?.("X-Subtitle-Partial") === "1";
+            const covered = Number(response.headers?.get?.("X-Subtitle-Covered"));
+            if (Number.isFinite(covered) && covered > 0) partialCovered = covered;
+            nextDelay = Number(response.headers?.get?.("Retry-After")) || (/^(ass|ssa)$/i.test(item.type) ? 4 : 2);
             content = await response.text();
             break;
           }
@@ -194,13 +322,8 @@ export function artplayerSubtitle(
           if (!extractingSince) extractingSince = Date.now();
           notifyStatus();
           art.notice.show = loadingNotice;
-          const seconds = Number(response.headers?.get("Retry-After")) || 1;
-          await new Promise<void>((resolve, reject) => {
-            const abort = () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); };
-            const timer = setTimeout(() => { controller.signal.removeEventListener("abort", abort); resolve(); }, Math.max(0.05, Math.min(3, seconds)) * 1000);
-            controller.signal.addEventListener("abort", abort, { once: true });
-            if (controller.signal.aborted) abort();
-          });
+          const seconds = Number(response.headers?.get?.("Retry-After")) || 1;
+          await sleep(Math.max(0.05, Math.min(3, seconds)) * 1000, controller.signal);
         }
         if (disposed || controller.signal.aborted) return;
         if (art.template.$noticeInner?.textContent === loadingNotice || art.notice.show === loadingNotice) art.notice.show = "";
@@ -210,13 +333,16 @@ export function artplayerSubtitle(
         else {
           textCues = parseTimedText(content);
           if (!textCues.length) throw new Error("字幕中没有可显示的文字");
+          if (!partialCovered) partialCovered = textCues[textCues.length - 1].endTime;
           textMode = true;
-          art.template.$subtitle.classList.toggle("synctv-srt", /^(srt|subrip)$/i.test(item.type));
+          art.template.$subtitle.classList.toggle("synctv-srt", /^(srt|subrip|vtt|webvtt)$/i.test(item.type));
           const offset = art.subtitleOffset;
           if (offset) art.subtitleOffset = offset;
           art.subtitle.show = true;
           refresh();
         }
+        partial = isPartial;
+        if (isPartial) void refreshPartial(key, item, content, nextDelay);
       } catch (error: any) {
         if (!disposed && !controller.signal.aborted) {
           loadError = error?.message || "字幕读取失败";
@@ -280,23 +406,36 @@ export function artplayerSubtitle(
       const matched = entries.filter(([, item]) => (item.matchRank || 0) > 0);
       const rank = Math.max(0, ...matched.map(([, item]) => item.matchRank || 0));
       const sameName = matched.filter(([, item]) => item.matchRank === rank);
+      const prefLang = normalizeLang(preference?.language);
+      const exactLang = (t: Subtitle) =>
+        prefLang ? normalizeLang(t.language) === prefLang : !normalizeLang(t.language);
+      const sameLang = (t: Subtitle) => Boolean(prefLang && normalizeLang(t.language) === prefLang);
       const match =
-        sameName.find(([, t]) => t.language === preference?.language && t.type === preference?.type) ||
-        sameName.find(([, t]) => /^(zh|chi|zho|chs|cht)/i.test(t.language || "")) || sameName[0] ||
+        sameName.find(([, t]) => exactLang(t) && t.type === preference?.type) ||
+        sameName.find(([, t]) => isChineseTrack(t) && isSimplifiedChinese(t)) ||
+        sameName.find(([, t]) => isChineseTrack(t)) ||
+        sameName[0] ||
         (preference &&
           entries.find(
             ([, t]) =>
-              t.language === preference.language &&
+              exactLang(t) &&
               t.type === preference.type &&
               t.origin === preference.origin &&
               t.title === preference.title
           )) ||
         (preference &&
-          entries.find(
-            ([, t]) => t.language === preference.language && t.type === preference.type
-          )) ||
+          entries.find(([, t]) => sameLang(t) && t.type === preference.type && !t.forced)) ||
+        (preference &&
+          entries.find(([, t]) => sameLang(t) && t.type === preference.type)) ||
+        (preference &&
+          entries.find(([, t]) => sameLang(t) && !t.forced && (prefLang !== "zh" || isSimplifiedChinese(t)))) ||
+        (preference && entries.find(([, t]) => sameLang(t) && !t.forced)) ||
+        (preference && entries.find(([, t]) => sameLang(t))) ||
+        entries.find(([, t]) => t.default && isChineseTrack(t) && !t.forced) ||
+        entries.find(([, t]) => isChineseTrack(t) && !t.forced && isSimplifiedChinese(t)) ||
+        entries.find(([, t]) => isChineseTrack(t) && !t.forced) ||
         entries.find(([, t]) => t.default) ||
-        entries.find(([, t]) => /^(zh|chi|zho|chs|cht)/i.test(t.language || "")) ||
+        entries.find(([, t]) => isChineseTrack(t)) ||
         entries[0];
       if (match && (match[0] !== selected || version(match[1]) !== selectedVersion)) void select(match[0]);
     };
@@ -383,6 +522,8 @@ export function artplayerSubtitle(
       folderAbort.abort();
       picker?.close();
       selectAbort?.abort();
+      partialAbort?.abort();
+      wakePartial = undefined;
     });
     return { name: "artplayerSubtitle", status };
   };

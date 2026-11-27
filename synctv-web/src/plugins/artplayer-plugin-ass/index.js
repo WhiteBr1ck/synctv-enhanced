@@ -31,6 +31,7 @@ export default function artplayerPluginAss(options = {}) {
     let offset = 0;
     let appearance = loadSubtitleAppearance();
     let originalContent = "";
+    let pendingContent = null;
     let request;
     const retired = new Set();
     const swaps = new Set();
@@ -66,6 +67,7 @@ export default function artplayerPluginAss(options = {}) {
         // initialize. A font upgrade must not blank an already working track.
         if (instance) retired.add(instance);
         originalContent = content;
+        pendingContent = null;
         instance = new SubtitlesOctopus({
           ...options,
           availableFonts: { "times new roman": absolute(TimesNewRomanFont) },
@@ -76,6 +78,11 @@ export default function artplayerPluginAss(options = {}) {
           fonts: (item.fonts || []).map(absolute),
           onReady: () => {
             if (disposed || current !== generation) return;
+            if (pendingContent !== null && pendingContent !== originalContent) {
+              originalContent = pendingContent;
+              pendingContent = null;
+              instance?.setTrack(scaleAss(originalContent, appearance.scale));
+            }
             art.emit("artplayer-plugin-ass:status", { state: "ready" });
             refresh();
             const timer = setTimeout(() => {
@@ -120,6 +127,17 @@ export default function artplayerPluginAss(options = {}) {
       }
     };
     art.on("artplayer-plugin-ass:switch", (track) => { setVisible(true); void select(track); });
+    art.on("artplayer-plugin-ass:update", (content) => {
+      if (disposed || typeof content !== "string" || content === originalContent) return;
+      if (instance?.worker && instance.workerActive) {
+        originalContent = content;
+        pendingContent = null;
+        instance.setTrack(scaleAss(originalContent, appearance.scale));
+        refresh();
+      } else {
+        pendingContent = content;
+      }
+    });
     art.on("artplayer-plugin-ass:visible", setVisible);
     art.on("subtitleOffset", (value) => { offset = value; if (instance) instance.timeOffset = value; });
     for (const event of ['video:waiting','video:stalled','video:seeking']) art.on(event, () => { buffering = true; refresh(); });

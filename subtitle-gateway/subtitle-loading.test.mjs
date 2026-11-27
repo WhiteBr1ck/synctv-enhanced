@@ -188,3 +188,105 @@ test('reports subtitle loading status across discovery, embedded extraction, ASS
   assert.equal(plugin.status(),'已关闭（共 1 条可用）');
  }finally{art.emit('destroy');globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
 });
+
+test('progressive embedded subtitles render immediately and upgrade silently in the background',async()=>{
+ const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage;
+ globalThis.localStorage={getItem:()=>null,setItem(){}};
+ const calls=[];
+ let step=0;
+ globalThis.fetch=async(url,options)=>{
+  calls.push({url,headers:options?.headers});
+  step++;
+  if(step===1){
+   return {
+    status:200,ok:true,
+    headers:{get:name=>({ 'X-Subtitle-Partial':'1','X-Subtitle-Covered':'15','Retry-After':'0.05' }[name]||null)},
+    text:async()=>'1\n00:00:09,000 --> 00:00:12,000\nEarly cue\n'
+   };
+  }
+  return {
+   status:200,ok:true,
+   headers:{get:()=>null},
+   text:async()=>'1\n00:00:09,000 --> 00:00:12,000\nEarly cue\n\n2\n00:05:00,000 --> 00:05:03,000\nLater cue\n'
+  };
+ };
+ const art=player();
+ try{
+  const plugin=artplayerSubtitle({track:{url:'/_synctv/subtitles/test/track-2.srt',type:'srt',origin:'embedded',language:'zho',title:'简体'}})(art);
+  await tick();
+  assert.equal(calls[0].headers['X-Subtitle-Progressive'],'1');
+  assert.equal(calls[0].headers['X-Subtitle-Time'],'10');
+  assert.equal(art.subtitle.show,true);
+  assert.equal(art.subtitle.activeCues[0].text,'Early cue');
+  assert.match(plugin.status(),/^已就绪（后台补全中）/);
+  await new Promise(resolve=>setTimeout(resolve,120));
+  assert.equal(art.subtitle.cues.length,2);
+  assert.match(plugin.status(),/^已就绪 ·/);
+ }finally{art.emit('destroy');globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
+});
+
+test('progressive ASS updates emit in-place track updates without recreating the renderer',async()=>{
+ const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage;
+ globalThis.localStorage={getItem:()=>null,setItem(){}};
+ let step=0;
+ const updates=[];
+ globalThis.fetch=async()=>{
+  step++;
+  if(step===1){
+   return {
+    status:200,ok:true,
+    headers:{get:name=>({ 'X-Subtitle-Partial':'1','X-Subtitle-Covered':'15','Retry-After':'0.05' }[name]||null)},
+    text:async()=>'[Events]\nDialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Line 1\n'
+   };
+  }
+  return {
+   status:200,ok:true,
+   headers:{get:()=>null},
+   text:async()=>'[Events]\nDialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Line 1\nDialogue: 0,0:00:20.00,0:00:22.00,Default,,0,0,0,,Line 2\n'
+  };
+ };
+ const art=player();
+ art.on('artplayer-plugin-ass:update',content=>updates.push(content));
+ try{
+  artplayerSubtitle({track:{url:'/_synctv/subtitles/test/track-2.ass',type:'ass',origin:'embedded',language:'chi'}})(art);
+  await tick();
+  assert.equal(art.state.tracks.length,1);
+  await new Promise(resolve=>setTimeout(resolve,120));
+  assert.equal(art.state.tracks.length,1,'must not recreate ASS renderer during background completion');
+  assert.equal(updates.length,1);
+  assert.match(updates[0],/Line 2/);
+ }finally{art.emit('destroy');globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
+});
+
+test('automatic selection prefers Chinese tracks over English default and matches preferred language across formats',async()=>{
+ const fetchBefore=globalThis.fetch,storageBefore=globalThis.localStorage;
+ const chosen=[];
+ globalThis.fetch=async url=>{chosen.push(url);return text('1\n00:00:09,000 --> 00:00:12,000\nOK\n');};
+ try{
+  // Case 1: Saved chi+ass preference falls back to zho+srt instead of English default.
+  globalThis.localStorage={getItem:()=>JSON.stringify({enabled:true,language:'chi',type:'ass',origin:'embedded'}),setItem(){}};
+  const art1=player();
+  artplayerSubtitle({
+   eng:{url:'eng',type:'srt',origin:'embedded',language:'eng',title:'English',default:true},
+   cht:{url:'cht',type:'srt',origin:'embedded',language:'zho',title:'繁體中文'},
+   chs:{url:'chs',type:'srt',origin:'embedded',language:'zho',title:'简体中文'}
+  })(art1);
+  await tick();
+  assert.deepEqual(chosen,['chs']);
+  art1.emit('destroy');
+
+  // Case 2: No preference picks non-forced Simplified Chinese over English default and forced Chinese.
+  chosen.length=0;
+  globalThis.localStorage={getItem:()=>null,setItem(){}};
+  const art2=player();
+  artplayerSubtitle({
+   eng:{url:'eng',type:'srt',origin:'embedded',language:'eng',title:'English',default:true},
+   forced:{url:'forced',type:'srt',origin:'embedded',language:'chi',title:'简体 Forced',forced:true},
+   cht:{url:'cht',type:'srt',origin:'embedded',language:'chi',title:'Traditional'},
+   chs:{url:'chs',type:'srt',origin:'embedded',language:'chi',title:'Simplified'}
+  })(art2);
+  await tick();
+  assert.deepEqual(chosen,['chs']);
+  art2.emit('destroy');
+ }finally{globalThis.fetch=fetchBefore;globalThis.localStorage=storageBefore;}
+});

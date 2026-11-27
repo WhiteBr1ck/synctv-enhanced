@@ -47,3 +47,101 @@ test('an interrupted audio play is not mistaken for an autoplay permission denia
   f.audio.readyState=4;f.audio.currentTime=0;f.advance(0);assert.equal(f.audio.playCalls,2,'playback can resume after buffering');
  }finally{f.cleanup();}
 });
+
+test('startup alignment mutes stale audio, snaps to video time once buffered, and avoids blind restarts',async()=>{
+ const f=fixture();try{
+  await tick();
+  assert.equal(f.audio.muted,true,'audio stays muted until aligned with video');
+  f.advance(3);
+  f.audio.readyState=4;f.audio.currentTime=0;
+  f.audio.seekable={length:1,start:()=>0,end:()=>6};
+  f.audio.resolvePlay();await tick();
+  f.advance(0);
+  assert.equal(f.audio.currentTime,3,'audio snaps directly to expected playback position');
+  assert.equal(f.audio.muted,false,'audio unmutes immediately after alignment');
+  assert.equal(f.audio.requests.length,1);
+ }finally{f.cleanup();}
+});
+
+test('unseekable lag recovers with lead compensation and waits until video reaches origin',async()=>{
+ const f=fixture();try{
+  await tick();
+  f.advance(4);
+  f.audio.readyState=4;f.audio.currentTime=0;f.audio.seekable={length:0};
+  f.audio.resolvePlay();await tick();
+  // Still inside alignment grace window -> holds silently instead of thrashing.
+  f.advance(1);
+  assert.equal(f.audio.requests.length,1);
+  assert.equal(f.audio.paused,true);
+  // Past 2.5s grace window after readyAt with unseekable drift > 1.2s -> restarts with lead compensation.
+  f.advance(3);
+  assert.equal(f.audio.requests.length,2);
+  const startParam=Number(new URL(f.audio.requests[1]).searchParams.get('start'));
+  assert.ok(startParam>f.video.currentTime,'reopened stream starts slightly ahead of video to absorb startup latency');
+  // Stream arrives early while video is still behind origin -> stays paused until video catches up.
+  f.audio.readyState=4;f.audio.currentTime=0;f.audio.paused=true;
+  f.advance(0);
+  assert.equal(f.audio.paused,true);
+  // Video reaches origin -> resumes in sync and unmutes.
+  f.video.currentTime=startParam+0.02;
+  f.advance(0);
+  assert.equal(f.audio.paused,false);
+  assert.equal(f.audio.muted,false);
+ }finally{f.cleanup();}
+});
+
+test('streams fragmented MP4 through MediaSource when supported and cleans up on destroy',async()=>{
+ const originalMS=globalThis.MediaSource,originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL;
+ const appended=[],revoked=[];let aborted=false;
+ class FakeSourceBuffer{
+  constructor(){this.updating=false;this.events=new Map();}
+  addEventListener(name,cb){this.events.set(name,cb);}
+  removeEventListener(name){this.events.delete(name);}
+  appendBuffer(buf){appended.push(buf.byteLength);}
+  remove(){}
+ }
+ class FakeMediaSource{
+  static isTypeSupported(mime){return mime.includes('mp4a.40.2');}
+  constructor(){this.readyState='open';this.ended=false;}
+  addEventListener(){}removeEventListener(){}
+  addSourceBuffer(){return new FakeSourceBuffer();}
+  endOfStream(){this.ended=true;}
+ }
+ globalThis.MediaSource=FakeMediaSource;
+ URL.createObjectURL=()=>'blob:compat-audio';
+ URL.revokeObjectURL=u=>revoked.push(u);
+ const f=fixture();
+ const origFetch=globalThis.fetch;
+ globalThis.fetch=async(url,options)=>{
+  if(url==='/tracks')return origFetch(url,options);
+  options?.signal?.addEventListener('abort',()=>{aborted=true;});
+  let sent=0;
+  return {
+   ok:true,
+   body:{
+    getReader(){
+     return {
+      async read(){
+       if(sent++===0)return {done:false,value:new Uint8Array([1,2,3,4])};
+       return new Promise(()=>{});
+      },
+      async cancel(){}
+     };
+    }
+   }
+  };
+ };
+ try{
+  await tick();
+  await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(f.audio.src,'blob:compat-audio');
+  assert.deepEqual(appended,[4]);
+  f.cleanup();
+  assert.equal(aborted,true);
+  assert.deepEqual(revoked,['blob:compat-audio']);
+ }finally{
+  globalThis.MediaSource=originalMS;
+  URL.createObjectURL=originalCreate;
+  URL.revokeObjectURL=originalRevoke;
+ }
+});

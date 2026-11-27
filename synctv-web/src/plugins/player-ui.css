@@ -54,6 +54,11 @@
   line-height: 1.4;
   padding: 6px 0;
 }
+.art-video-player .art-subtitle {
+  box-sizing: border-box;
+  padding: 0 max(6%, env(safe-area-inset-right, 0px)) 0 max(6%, env(safe-area-inset-left, 0px));
+  line-height: 1.35;
+}
 .art-video-player .art-subtitle.synctv-srt,
 .art-video-player .art-subtitle.synctv-srt .art-subtitle-line,
 .art-video-player .art-subtitle.synctv-srt .art-subtitle-line * {
@@ -437,10 +442,10 @@
   height: 42px;
 }
 .art-video-player.synctv-unified-player.art-control-show .art-subtitle {
-  bottom: calc(64px + var(--art-subtitle-bottom));
+  bottom: max(var(--art-subtitle-bottom), calc(72px + env(safe-area-inset-bottom, 0px) + var(--synctv-subtitle-lift, 0px)));
 }
 .art-video-player.synctv-unified-player.synctv-compact.art-control-show .art-subtitle {
-  bottom: calc(108px + var(--art-subtitle-bottom));
+  bottom: max(var(--art-subtitle-bottom), calc(116px + env(safe-area-inset-bottom, 0px) + var(--synctv-subtitle-lift, 0px)));
 }
 .art-video-player.synctv-unified-player .synctv-danmuku-style-settings {
   padding: 10px 0 0 !important;

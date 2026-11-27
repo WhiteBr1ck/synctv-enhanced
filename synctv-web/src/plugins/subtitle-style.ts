@@ -1,5 +1,13 @@
 import Artplayer from "artplayer";
-import { loadSubtitleAppearance, subtitleAppearanceKey, subtitleScales, subtitleLifts } from "@/utils/subtitle-style";
+import {
+  loadSubtitleAppearance,
+  subtitleAppearanceKey,
+  subtitleScales,
+  subtitleLifts,
+  subtitleColors,
+  srtBaseFontSize,
+  srtSafeBottom
+} from "@/utils/subtitle-style";
 import { icon } from "./icons";
 
 export function artplayerSubtitleStyle() {
@@ -7,12 +15,22 @@ export function artplayerSubtitleStyle() {
     let appearance = loadSubtitleAppearance();
     let colorInput: HTMLInputElement | undefined;
     const root = art.template.$player;
-    const bottom = getComputedStyle(root).getPropertyValue("--art-subtitle-bottom").trim() || "20px";
+    const isFullscreen = () =>
+      root.classList.contains("art-fullscreen") ||
+      root.classList.contains("art-fullscreen-web") ||
+      Boolean(art.fullscreen || art.fullscreenWeb);
     const apply = () => {
-      art.subtitle.style("fontSize", `calc(var(--art-subtitle-font-size, 20px) * ${appearance.scale})`);
-      root.style.setProperty('--synctv-srt-color', appearance.color);
-      if(colorInput)colorInput.value=appearance.color;
-      root.style.setProperty("--art-subtitle-bottom", `calc(${bottom} + ${root.clientHeight * appearance.lift / 100}px)`);
+      const baseSize = srtBaseFontSize(root.clientWidth);
+      const safeBottom = srtSafeBottom(root.clientHeight, isFullscreen());
+      const liftPx = Math.round((root.clientHeight * appearance.lift) / 100);
+      art.subtitle.style("fontSize", `${Math.round(baseSize * appearance.scale * 10) / 10}px`);
+      root.style.setProperty("--synctv-srt-color", appearance.color);
+      if (colorInput) colorInput.value = appearance.color;
+      root.style.setProperty("--synctv-subtitle-lift", `${liftPx}px`);
+      root.style.setProperty(
+        "--art-subtitle-bottom",
+        `calc(${safeBottom}px + env(safe-area-inset-bottom, 0px) + ${liftPx}px)`
+      );
       art.emit("artplayer-plugin-ass:appearance" as any, appearance);
     };
     const save = () => {
@@ -25,9 +43,16 @@ export function artplayerSubtitleStyle() {
     art.setting.add({ name: "subtitle-position", html: "字幕位置", icon: icon('position'), tooltip: appearance.lift ? `上移 ${appearance.lift}%` : "原始位置",
       selector: subtitleLifts.map(lift => ({ html: lift ? `上移 ${lift}%` : "原始位置", lift, default: lift === appearance.lift })),
       onSelect(item: any) { appearance.lift = item.lift; save(); return item.html; } });
-    const colors = [{html:'白色',color:'#ffffff'},{html:'黄色',color:'#ffff00'},{html:'青色',color:'#00ffff'},{html:'绿色',color:'#80ff80'},{html:'粉色',color:'#ffb3d9'},{html:'蓝色',color:'#80bfff'}];
-    art.setting.add({name:'subtitle-color',html:'SRT 字幕颜色',tooltip:colors.find(c=>c.color===appearance.color)?.html||'自定义',icon:icon('color'),selector:colors.map(c=>({...c,default:c.color===appearance.color})),
-      onSelect(item:any){appearance.color=item.color;save();return item.html;}});
+    const matchColor = (color: string) =>
+      subtitleColors.find(c => c.color.toLowerCase() === color.toLowerCase());
+    art.setting.add({
+      name: "subtitle-color",
+      html: "SRT 字幕颜色",
+      tooltip: matchColor(appearance.color)?.html || "自定义",
+      icon: icon("color"),
+      selector: subtitleColors.map(c => ({ ...c, default: c.color.toLowerCase() === appearance.color.toLowerCase() })),
+      onSelect(item: any) { appearance.color = item.color; save(); return item.html; }
+    });
     art.setting.add({name:'subtitle-custom-color',html:'自定义 SRT 颜色',icon:icon('color'),mounted:(_,item:any)=>{
       const input=document.createElement('input');input.type='color';input.value=appearance.color;input.setAttribute('aria-label','自定义 SRT 颜色');
       colorInput=input;
@@ -39,6 +64,8 @@ export function artplayerSubtitleStyle() {
     const observer = new ResizeObserver(apply);
     observer.observe(root);
     art.on("ready", apply);
+    art.on("fullscreen", apply);
+    art.on("fullscreenWeb", apply);
     art.on("destroy", () => observer.disconnect());
     apply();
     return { name: "subtitleStyle", appearance: () => ({ ...appearance }) };

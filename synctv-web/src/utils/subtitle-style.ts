@@ -2,6 +2,27 @@ export interface SubtitleAppearance { scale: number; lift: number; color: string
 export const subtitleAppearanceKey = "synctv:subtitle-appearance";
 export const subtitleScales = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const subtitleLifts = [0, 5, 10, 15, 20];
+export const subtitleColors = [
+  { html: "白色", color: "#ffffff" },
+  { html: "灰色", color: "#c0c0c0" },
+  { html: "黄色", color: "#ffff00" },
+  { html: "青色", color: "#00ffff" },
+  { html: "绿色", color: "#80ff80" },
+  { html: "粉色", color: "#ffb3d9" },
+  { html: "蓝色", color: "#80bfff" }
+] as const;
+
+export function srtBaseFontSize(playerWidth = 0): number {
+  if (!Number.isFinite(playerWidth) || playerWidth <= 0) return 40;
+  return Math.min(40, Math.max(22, Math.round(playerWidth * 0.068)));
+}
+
+export function srtSafeBottom(playerHeight = 0, fullscreen = false): number {
+  if (!Number.isFinite(playerHeight) || playerHeight <= 0) return fullscreen ? 64 : 28;
+  return fullscreen
+    ? Math.max(48, Math.round(playerHeight * 0.065))
+    : Math.max(24, Math.round(playerHeight * 0.055));
+}
 
 export function normalizeAppearance(value: Partial<SubtitleAppearance> = {}): SubtitleAppearance {
   return { scale: subtitleScales.includes(value.scale!) ? value.scale! : 1,
